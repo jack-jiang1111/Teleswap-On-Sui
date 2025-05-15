@@ -1,9 +1,10 @@
-
+#[allow(unused)]
 module teleswap::btcrelay {
     
     // === Imports ===
     use sui::table::{Self, Table};
     use sui::event;
+    use sui::package::{Self, UpgradeCap};
     use teleswap::bitcoin_helper::{Self as BitcoinHelper}; // Add this line
 
     // === Errors ===
@@ -21,13 +22,22 @@ module teleswap::btcrelay {
     const EUNEXPECTED_RETARGET: u64 = 11; // BitcoinRelay: unexpected retarget on external call
     const EDUPLICATE_HEADER: u64 = 12; // txid == 0
     const ERETARGET_REQUIRED: u64 = 13; // BitcoinRelay: retarget required on external call
-    
+    const EALREADY_INITIALIZED: u64 = 14;
+
     // === Constants ===
     const ONE_HUNDRED_PERCENT: u64 = 10000;
     const MAX_FINALIZATION_PARAMETER: u64 = 432; // roughly 3 days
     const MAX_ALLOWED_GAP: u64 = 5400; // 90 minutes in seconds
 
     // === Structs ===
+
+    // This struct is used to track the admin of the contract
+    public struct RELAY_ADMIN has key, store {
+        id: UID,
+        initialized: bool,
+        owner: address
+    }
+
     public struct BlockHeader has store, drop, copy {
         selfHash: vector<u8>,
         parentHash: vector<u8>,
@@ -37,7 +47,6 @@ module teleswap::btcrelay {
 
     public struct BTCRelay has key {
         id: UID,
-        owner: address,  // Add this field
         initialHeight: u64,
         lastSubmittedHeight: u64,
         finalizationParameter: u64,
@@ -100,11 +109,7 @@ module teleswap::btcrelay {
         newSubmissionGasUsed: u64
     }
     
-    // === Method Aliases ===
-    fun assert_owner(relay: &BTCRelay, ctx: &TxContext) {
-        assert!(relay.owner == tx_context::sender(ctx), EINVALID_ADMIN)
-    }
-    
+
     // === Public Functions ===
 
     /// @dev Checks the retarget, the heights, and the linkage
@@ -255,11 +260,12 @@ module teleswap::btcrelay {
     // === Admin Functions ===
     ///  @notice setter for finalizationParameter Owner only
     ///  @param parameter The new finalization parameter
-    public entry fun setFinalizationParameter(relay: &mut BTCRelay, parameter: u64, ctx: &TxContext) 
-    {
-        // Check owner
-        assert_owner(relay, ctx);
-        
+    public entry fun setFinalizationParameter(
+        relay: &mut BTCRelay, 
+        parameter: u64, 
+        admin: &RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
         // Validate parameter
         assert!(
             parameter > 0 && parameter <= MAX_FINALIZATION_PARAMETER,
@@ -279,10 +285,12 @@ module teleswap::btcrelay {
     /// @notice Setter for relayerPercentageFee
     /// @dev A percentage of the submission gas used goes to Relayers as reward
     /// @param fee New percentage fee
-    public entry fun set_relayer_percentage_fee(relay: &mut BTCRelay, fee: u64, ctx: &TxContext) {
-        // Check owner
-        assert_owner(relay, ctx);
-        
+    public entry fun set_relayer_percentage_fee(
+        relay: &mut BTCRelay, 
+        fee: u64, 
+        admin: &RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
         // Validate fee
         assert!(fee <= ONE_HUNDRED_PERCENT, EINVALID_PARAMETER);
 
@@ -298,10 +306,12 @@ module teleswap::btcrelay {
 
     ///  @notice Setter for epochLength Owner only
     ///  @param length The new epoch length
-    public entry fun set_epoch_length(relay: &mut BTCRelay, length: u64, ctx: &TxContext) {
-        // Check owner
-        assert_owner(relay, ctx);
-        
+    public entry fun set_epoch_length(
+        relay: &mut BTCRelay, 
+        length: u64, 
+        admin: &RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
         // Validate length
         assert!(length > 0, EINVALID_PARAMETER);
 
@@ -314,13 +324,16 @@ module teleswap::btcrelay {
         // Update state
         relay.epochLength = length;
     }
+    
     /// @notice External setter for baseQueries Owner only
     /// @param _baseQueries The base number of queries we assume in each epoch
     /// This prevents query fee to grow significantly
-    public entry fun set_base_queries(relay: &mut BTCRelay, queries: u64, ctx: &TxContext) {
-        // Check owner
-        assert_owner(relay, ctx);
-        
+    public entry fun set_base_queries(
+        relay: &mut BTCRelay, 
+        queries: u64, 
+        admin: &RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
         // Validate queries
         assert!(queries > 0, EINVALID_PARAMETER);
 
@@ -334,13 +347,14 @@ module teleswap::btcrelay {
         relay.baseQueries = queries;
     }
     
-
     /// @notice Setter for submissionGasUsed
     /// @param gas: The gas used by Relayers for submitting a block header
-    public entry fun set_submission_gas_used(relay: &mut BTCRelay, gas: u64, ctx: &TxContext) {
-        // Check owner
-        assert_owner(relay, ctx);
-        
+    public entry fun set_submission_gas_used(
+        relay: &mut BTCRelay, 
+        gas: u64, 
+        admin: &RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
         // Validate gas
         assert!(gas > 0, EINVALID_PARAMETER);
 
@@ -354,32 +368,40 @@ module teleswap::btcrelay {
         relay.submissionGasUsed = gas;
     }
 
-    public fun pause_relay(relay: &mut BTCRelay, ctx: &TxContext) {
-        assert_owner(relay, ctx);
+    public entry fun pause_relay(
+        relay: &mut BTCRelay, 
+        admin: &RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
         relay.paused = true;
     }
 
-    public fun unpause_relay(relay: &mut BTCRelay, ctx: &TxContext) {
-        assert_owner(relay, ctx);
+    public entry fun unpause_relay(
+        relay: &mut BTCRelay, 
+        admin: &RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
         relay.paused = false;
     }
 
-    public fun renounce_ownership(relay: &mut BTCRelay, ctx: &TxContext) {
-        assert_owner(relay, ctx);
-        relay.owner = @0x0; // Set to zero address to renounce ownership
+    public entry fun renounce_admin_ownership(
+        admin: RELAY_ADMIN,
+        ctx: &TxContext
+    ) {
+        assert!(tx_context::sender(ctx) == admin.owner, EINVALID_ADMIN);
+        // Transfer the RELAY_ADMIN object to zero address
+        transfer::public_transfer(admin, @0x0);
     }
 
     /// @notice Same as addHeaders, but can only be called by owner even if contract is paused
     /// It will be used if a fork happened
-    public fun ownerAddHeaders(
+    public entry fun ownerAddHeaders(
         relay: &mut BTCRelay,
         anchor: vector<u8>,
         headers: vector<u8>,
+        admin: &RELAY_ADMIN,
         ctx: &mut TxContext
     ): bool {
-        // Check owner
-        assert_owner(relay, ctx);
-
         // Check input sizes
         check_input_size_add_headers(&headers, &anchor);
 
@@ -389,16 +411,14 @@ module teleswap::btcrelay {
 
     /// @notice Same as addHeadersWithRetarget, but can only be called by owner even if contract is paused
     /// It will be used if a fork happened
-    public fun ownerAddHeadersWithRetarget(
+    public entry fun ownerAddHeadersWithRetarget(
         relay: &mut BTCRelay,
         old_period_start_header: vector<u8>,
         old_period_end_header: vector<u8>,
         headers: vector<u8>,
+        admin: &RELAY_ADMIN,
         ctx: &mut TxContext
     ): bool {
-        // Check owner
-        assert_owner(relay, ctx);
-
         // Check input sizes
         check_input_size_add_headers_with_retarget(
             &old_period_start_header,
@@ -417,12 +437,36 @@ module teleswap::btcrelay {
     }
     
     // === Package Functions ===
-
+    
+    
+    
     fun init(ctx: &mut TxContext) {
-        let genesis_header_hex = b"00e0ec30ed5e5696dc37f337bc88d8fd1ac21a51718126a68ced020000000000000000006dff7c05f9a444efd9d9454dc962da95712477682fd80372c768b070c54554ca16593566db310317a966fefa";
-        let genesis_header = BitcoinHelper::hex_to_bytes(&genesis_header_hex); // Updated to use BitcoinHelper
-        let height = 841968;
-        let period_start = genesis_header;
+        // Create and transfer the RELAY_ADMIN object to the sender
+        transfer::transfer(RELAY_ADMIN { 
+            id: object::new(ctx),
+            initialized: false,
+            owner: tx_context::sender(ctx)
+        }, tx_context::sender(ctx));
+    }
+    
+    public entry fun initialize(
+        genesis_header_hex: vector<u8>,
+        height: u64,
+        period_start: vector<u8>,
+        finalization_parameter: u64,
+        admin: &mut RELAY_ADMIN,
+        ctx: &mut TxContext
+    ) {
+        // Check if already initialized
+        assert!(!admin.initialized, EALREADY_INITIALIZED);
+        
+        // Mark as initialized
+        admin.initialized = true;
+
+        // Validate parameters
+        assert!(finalization_parameter > 0 && finalization_parameter <= MAX_FINALIZATION_PARAMETER, EINVALID_PARAMETER);
+        
+        let genesis_header = BitcoinHelper::hex_to_bytes(&genesis_header_hex);
         
         // Validate genesis header
         assert!(
@@ -459,10 +503,9 @@ module teleswap::btcrelay {
         // Create and share relay object
         let relay = BTCRelay {
             id: object::new(ctx),
-            owner: tx_context::sender(ctx),
             initialHeight: height,
             lastSubmittedHeight: height,
-            finalizationParameter: 3,
+            finalizationParameter: finalization_parameter,
             relayerPercentageFee: 500,
             submissionGasUsed: 300000,
             epochLength: BitcoinHelper::get_retarget_period_blocks(),
@@ -476,6 +519,7 @@ module teleswap::btcrelay {
             blockHeight: block_height,
         };
 
+        // Share relay
         transfer::share_object(relay);
     }
 
