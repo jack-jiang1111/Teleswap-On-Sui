@@ -5,66 +5,81 @@ module teleswap::btcrelay {
     use sui::table::{Self, Table};
     use sui::event;
     use sui::package::{Self, UpgradeCap};
-    use teleswap::bitcoin_helper::{Self as BitcoinHelper}; // Add this line
+    use teleswap::bitcoin_helper::{Self as BitcoinHelper}; // Helper module for Bitcoin-specific operations
+    use std::debug;
+    use std::address::length;
+    use teleswap::bitcoin_helper::hex_to_bytes;
+    use teleswap::bitcoin_helper;
 
-    // === Errors ===
-    const EINVALID_HEADER: u64 = 0;
-    const EINVALID_CHAIN: u64 = 1;
-    const EINVALID_POW: u64 = 2;
-    const EINVALID_TIMESTAMP: u64 = 3;
-    const EINVALID_ADMIN: u64 = 4;
-    const EINVALID_PARAMETER: u64 = 5;
-    const EOUTDATE_HEADER: u64 = 6;
-    const EPAUSED: u64 = 7;
-    const EINVALID_TXID: u64 = 8; // txid == 0
-    const EEARLY_BLOCK: u64 = 9; // the block hasn't finalized yet
-    const EOUTDATE_BLOCK: u64 = 10; // the block is too old
-    const EUNEXPECTED_RETARGET: u64 = 11; // BitcoinRelay: unexpected retarget on external call
-    const EDUPLICATE_HEADER: u64 = 12; // txid == 0
-    const ERETARGET_REQUIRED: u64 = 13; // BitcoinRelay: retarget required on external call
-    const EALREADY_INITIALIZED: u64 = 14;
+    // === Error Codes ===
+    // Error codes for various validation and operation failures
+    const EINVALID_HEADER: u64 = 0;        // Invalid Bitcoin block header format
+    const EINVALID_CHAIN: u64 = 1;         // Invalid chain linkage between blocks
+    const EINVALID_POW: u64 = 2;           // Invalid proof of work
+    const EINVALID_TIMESTAMP: u64 = 3;     // Invalid block timestamp
+    const EINVALID_ADMIN: u64 = 4;         // Invalid admin operation
+    const EINVALID_PARAMETER: u64 = 5;     // Invalid parameter value
+    const EOUTDATE_HEADER: u64 = 6;        // Header is too old to be submitted
+    const EPAUSED: u64 = 7;                // Contract is paused
+    const EINVALID_TXID_OR_NODE: u64 = 8;  // Invalid transaction ID or Merkle tree node
+    const EEARLY_BLOCK: u64 = 9;           // Block hasn't reached finalization period
+    const EOUTDATE_BLOCK: u64 = 10;        // Block is too old for verification
+    const EUNEXPECTED_RETARGET: u64 = 11;  // Unexpected difficulty retarget
+    const EDUPLICATE_HEADER: u64 = 12;     // Duplicate block header submission
+    const ERETARGET_REQUIRED: u64 = 13;    // Need to call retarget function instead
+    const EALREADY_INITIALIZED: u64 = 14;  // Contract already initialized
+    const EINVALID_HASH: u64 = 15;         // Invalid hash value
+    const DEBUG_LOG: u64 = 8888;           // Debug logging code
 
     // === Constants ===
-    const ONE_HUNDRED_PERCENT: u64 = 10000;
-    const MAX_FINALIZATION_PARAMETER: u64 = 432; // roughly 3 days
-    const MAX_ALLOWED_GAP: u64 = 5400; // 90 minutes in seconds
+    const ONE_HUNDRED_PERCENT: u64 = 10000;        // 100% in basis points
+    const MAX_FINALIZATION_PARAMETER: u64 = 432;   // Maximum finalization period (roughly 3 days)
+    const MAX_ALLOWED_GAP: u64 = 5400;             // Maximum allowed time gap (90 minutes in seconds)
 
     // === Structs ===
 
-    // This struct is used to track the admin of the contract
+    /// Admin control structure for the contract
+    /// Stores initialization state and owner address
     public struct RELAY_ADMIN has key, store {
         id: UID,
         initialized: bool,
         owner: address
     }
 
+    /// Represents a Bitcoin block header with essential information
+    /// Used for storing and verifying block headers
     public struct BlockHeader has store, drop, copy {
-        selfHash: vector<u8>,
-        parentHash: vector<u8>,
-        merkleRoot: vector<u8>,
-        relayer: address,
+        selfHash: vector<u8>,      // Hash of this block
+        parentHash: vector<u8>,    // Hash of parent block
+        merkleRoot: vector<u8>,    // Merkle root of transactions
+        relayer: address,          // Address of the relayer who submitted this header
     }
 
+    /// Main contract structure for Bitcoin relay
+    /// Manages the relay of Bitcoin block headers to Sui
     public struct BTCRelay has key {
         id: UID,
-        initialHeight: u64,
-        lastSubmittedHeight: u64,
-        finalizationParameter: u64,
-        relayerPercentageFee: u64,
-        submissionGasUsed: u64,
-        epochLength: u64,
-        baseQueries: u64,
-        currentEpochQueries: u64,
-        lastEpochQueries: u64,
-        relayGenesisHash: vector<u8>, // byte32
-        paused: bool,
+        initialHeight: u64,                // Starting block height
+        lastSubmittedHeight: u64,          // Most recent block height
+        finalizationParameter: u64,        // Number of blocks required for finalization
+        relayerPercentageFee: u64,         // Fee percentage for relayers
+        submissionGasUsed: u64,            // Gas used for header submission
+        epochLength: u64,                  // Length of an epoch in blocks
+        baseQueries: u64,                  // Base number of queries per epoch
+        currentEpochQueries: u64,          // Current epoch query count
+        lastEpochQueries: u64,             // Previous epoch query count
+        relayGenesisHash: vector<u8>,      // Genesis block hash
+        paused: bool,                      // Contract pause state
         
-        chain: Table<u64, vector<BlockHeader>>, // height => list of block headers
-        previousBlock: Table<vector<u8>, vector<u8>>, // block header hash => parent header hash
-        blockHeight: Table<vector<u8>, u64>, // block header hash => block height
+        chain: Table<u64, vector<BlockHeader>>,           // Maps height to block headers
+        previousBlock: Table<vector<u8>, vector<u8>>,     // Maps block hash to parent hash
+        blockHeight: Table<vector<u8>, u64>,              // Maps block hash to height
     }
 
     // === Events ===
+    // Events emitted for important state changes and operations
+
+    /// Emitted when a new block header is added to the relay
     public struct BlockAdded has copy, drop {
         height: u64,
         self_hash: vector<u8>,
@@ -72,6 +87,7 @@ module teleswap::btcrelay {
         relayer: address
     }
 
+    /// Emitted when a block header is finalized
     public struct BlockFinalized has copy, drop {
         height: u64,
         self_hash: vector<u8>,
@@ -79,43 +95,61 @@ module teleswap::btcrelay {
         relayer: address,
     }
 
+    /// Emitted when a new transaction verification query is made
     public struct NewQuery has copy, drop {
         tx_id: vector<u8>,
         block_height: u64,
     }
 
+    /// Emitted when finalization parameter is updated
     public struct NewFinalizationParameter has copy, drop {
         oldFinalizationParameter: u64,
         newFinalizationParameter: u64
     }
 
+    /// Emitted when relayer fee percentage is updated
     public struct NewRelayerPercentageFee has copy, drop {
         oldRelayerPercentageFee: u64,
         newRelayerPercentageFee: u64
     }
 
+    /// Emitted when epoch length is updated
     public struct NewEpochLength has copy, drop {
         oldEpochLength: u64,
         newEpochLength: u64
     }
 
+    /// Emitted when base queries parameter is updated
     public struct NewBaseQueries has copy, drop {
         oldBaseQueries: u64,
         newBaseQueries: u64
     }
 
+    /// Emitted when submission gas used parameter is updated
     public struct NewSubmissionGasUsed has copy, drop {
         oldSubmissionGasUsed: u64,
         newSubmissionGasUsed: u64
     }
-    
+
+    /// Debug event for development and troubleshooting
+    public struct DebugEvent has copy, drop {
+        vec1: vector<u8>,
+        vec2: vector<u8>,
+        vec3: vector<u8>,
+        num1: u256,
+        num2: u256,
+        num3: u256,
+        addr1: address,
+        addr2: address,
+        addr3: address
+    }
 
     // === Public Functions ===
 
-    /// @dev Checks the retarget, the heights, and the linkage
-    /// @param old_period_start_header The first header in the difficulty period being closed
-    /// @param old_period_end_header The last header in the difficulty period being closed (anchor of new headers)
-    /// @param headers A tightly-packed list of 80-byte Bitcoin headers
+    /// Adds Bitcoin block headers to the relay with difficulty retargeting
+    /// @param old_period_start_header First header in the difficulty period being closed
+    /// @param old_period_end_header Last header in the difficulty period being closed
+    /// @param headers Tightly-packed list of 80-byte Bitcoin headers
     /// @return True if successfully written, error otherwise
     public entry fun addHeadersWithRetarget(
         relay: &mut BTCRelay,
@@ -127,27 +161,31 @@ module teleswap::btcrelay {
         // Check if contract is not paused
         assert!(!relay.paused, EPAUSED);
 
-        // Check input sizes
+        // Convert hex strings to bytes
+        let old_period_start_header_bytes = BitcoinHelper::hex_to_bytes(&old_period_start_header);
+        let old_period_end_header_bytes = BitcoinHelper::hex_to_bytes(&old_period_end_header);
+        let headers_bytes = BitcoinHelper::hex_to_bytes(&headers);
+
+        // Validate input sizes
         check_input_size_add_headers_with_retarget(
-            &old_period_start_header,
-            &old_period_end_header,
-            &headers
+            &old_period_start_header_bytes,
+            &old_period_end_header_bytes,
+            &headers_bytes
         );
 
-        // Call internal function to add headers with retarget
+        // Add headers with retarget validation
         add_headers_with_retarget(
             relay,
-            &old_period_start_header,
-            &old_period_end_header,
-            &headers,
+            &old_period_start_header_bytes,
+            &old_period_end_header_bytes,
+            &headers_bytes,
             ctx
         )
     }
 
-    /// @notice Adds headers to storage after validating
-    /// @dev Checks integrity and consistency of the header chain
-    /// @param anchor The header immediately preceeding the new chain
-    /// @param headers A tightly-packed list of 80-byte Bitcoin headers
+    /// Adds Bitcoin block headers to the relay without difficulty retargeting
+    /// @param anchor The header immediately preceding the new chain, in hex format without 0x prefix
+    /// @param headers Tightly-packed list of Bitcoin headers, in hex format without 0x prefix
     /// @return True if successfully written, error otherwise
     public fun addHeaders(
         relay: &mut BTCRelay,
@@ -158,20 +196,23 @@ module teleswap::btcrelay {
         // Check if contract is not paused
         assert!(!relay.paused, EPAUSED);
 
-        // Check input sizes
-        check_input_size_add_headers(&headers, &anchor);
+        // Convert hex strings to bytes
+        let anchor_bytes = BitcoinHelper::hex_to_bytes(&anchor);
+        let headers_bytes = BitcoinHelper::hex_to_bytes(&headers);
 
-        // Call internal function to add headers
-        add_headers(relay, &anchor, &headers, false,ctx)
+        // Validate input sizes
+        check_input_size_add_headers(&headers_bytes, &anchor_bytes);
+
+        // Add headers to the relay
+        add_headers(relay, &anchor_bytes, &headers_bytes, false, ctx)
     }
 
-    /// @notice Checks if a tx is included and finalized on Bitcoin
-    /// @dev Checks if the block is finalized, and Merkle proof is valid
-    /// @param _txid Desired tx Id in LE form
-    /// @param _blockHeight of the desired tx
-    /// @param _intermediateNodes Part of the Merkle tree from the tx to the root in LE form (called Merkle proof)
-    /// @param _index of the tx in Merkle tree
-    /// @return True if the provided tx is confirmed on Bitcoin
+    /// Verifies if a Bitcoin transaction is included and finalized in a block
+    /// @param txid Transaction ID in little-endian format (hex format without 0x prefix)
+    /// @param block_height Height of the block containing the transaction
+    /// @param intermediate_nodes Merkle proof nodes from transaction to root (hex format without 0x prefix)
+    /// @param index Position of transaction in the block
+    /// @return True if transaction is confirmed on Bitcoin
     public fun checkTxProof(
             relay: &mut BTCRelay,
             txid: vector<u8>,
@@ -182,192 +223,206 @@ module teleswap::btcrelay {
             // Check if contract is not paused
             assert!(!relay.paused, EPAUSED);
 
-            // Check that txid is not empty and not all zeros
-            assert!(!vector::is_empty(&txid), EINVALID_TXID);
+            // Convert hex strings to bytes
+            let txid_bytes = BitcoinHelper::hex_to_bytes(&txid);
+            let intermediate_nodes_bytes = BitcoinHelper::hex_to_bytes(&intermediate_nodes);
 
-            // Check that txid is not all zeros
-            assert!(!BitcoinHelper::equalzero(&txid), EINVALID_TXID);
+            // Validate transaction ID
+            assert!(!vector::is_empty(&txid_bytes), EINVALID_TXID_OR_NODE);
+            assert!(!BitcoinHelper::equalzero(&txid_bytes), EINVALID_TXID_OR_NODE);
+            assert!(vector::length(&txid_bytes) == 32, EINVALID_TXID_OR_NODE);
+            assert!(vector::length(&intermediate_nodes_bytes) == 160, EINVALID_TXID_OR_NODE);
 
-            // Check if block is finalized
+            // Validate block height and finalization
+            assert!(block_height >= relay.initialHeight, EOUTDATE_BLOCK);
             assert!(
                 block_height + relay.finalizationParameter < relay.lastSubmittedHeight + 1,
                 EEARLY_BLOCK
             );
 
-            // Check if block exists on relay
-            assert!(
-                block_height >= relay.initialHeight,
-                EOUTDATE_BLOCK
-            );
-
-            // Get the block header at the specified height
+            // Get block header and merkle root
             let headers = table::borrow(&relay.chain, block_height);
             let block_header = vector::borrow(headers, 0);
-
-            // Get merkle root from the block header
             let merkle_root = block_header.merkleRoot;
 
-            // Emit new query event
+            // Emit query event
             event::emit(NewQuery {
-                tx_id: txid,
+                tx_id: txid_bytes,
                 block_height,
             });
 
-            // Verify the merkle proof
-            BitcoinHelper::prove(txid, merkle_root, intermediate_nodes, index)
+            // Verify merkle proof
+            BitcoinHelper::prove(txid_bytes, merkle_root, intermediate_nodes_bytes, index)
     }
 
     // === View Functions ===
+    /// Returns the genesis block hash of the relay
     public fun relayGenesisHash(relay: &BTCRelay): vector<u8> { *&relay.relayGenesisHash }
     
+    /// Returns the initial block height of the relay
     public fun initialHeight(relay: &BTCRelay): u64 { relay.initialHeight }
     
+    /// Returns the most recently submitted block height
     public fun lastSubmittedHeight(relay: &BTCRelay): u64 { relay.lastSubmittedHeight }
     
+    /// Returns the number of blocks required for finalization
     public fun finalizationParameter(relay: &BTCRelay): u64 { relay.finalizationParameter }
     
+    /// Returns the percentage fee for relayers
     public fun relayerPercentageFee(relay: &BTCRelay): u64 { relay.relayerPercentageFee }
     
+    /// Returns the length of an epoch in blocks
     public fun epochLength(relay: &BTCRelay): u64 { relay.epochLength }
     
+    /// Returns the number of queries in the last epoch
     public fun lastEpochQueries(relay: &BTCRelay): u64 { relay.lastEpochQueries }
     
+    /// Returns the current number of queries in this epoch
     public fun currentEpochQueries(relay: &BTCRelay): u64 { relay.currentEpochQueries }
     
+    /// Returns the base number of queries per epoch
     public fun baseQueries(relay: &BTCRelay): u64 { relay.baseQueries }
     
+    /// Returns the gas used for header submission
     public fun submissionGasUsed(relay: &BTCRelay): u64 { relay.submissionGasUsed }
     
-    /// @notice Getter for a specific block header's hash in the stored chain
-    /// @param  _height of the desired block header
-    /// @param  _index of the desired block header in that height
-    /// @return Block header's hash
+    /// Returns the hash of a specific block header
+    /// @param height Block height
+    /// @param index Index of the header at that height
+    /// @return Block header hash in little-endian format
     public fun getBlockHeaderHash(relay: &BTCRelay, height: u64, index: u64): vector<u8> {
         let headers = table::borrow(&relay.chain, height);
-        vector::borrow(headers, index).selfHash
+        // convert bytes to hex, reversing the order. So the zeros are at the beginning
+        BitcoinHelper::reverse_bytes32(&vector::borrow(headers, index).selfHash)
     }
     
-    /// @notice Getter for the number of submitted block headers in a height
-    /// @dev This shows the number of temporary forks in that specific height
-    /// @param  _height The desired height of the blockchain
-    /// @return Number of block headers stored in a height
+    /// Returns the number of block headers at a specific height
+    /// @param height Block height to check
+    /// @return Number of block headers at that height
     public fun getNumberOfSubmittedHeaders(relay: &BTCRelay, height: u64): u64 {
         let headers = table::borrow(&relay.chain, height);
         vector::length(headers)
     }
 
-    
+    /// Finds the height of a block header by its hash
+    /// @param hash Block header hash in big-endian format
+    /// @return Height of the block header
+    public entry fun find_height(relay: &BTCRelay, hash: vector<u8>): u64 {
+        assert!(table::contains(&relay.blockHeight, hash), EINVALID_HASH);
+        *table::borrow(&relay.blockHeight, hash)
+    }
+
     // === Admin Functions ===
-    ///  @notice setter for finalizationParameter Owner only
-    ///  @param parameter The new finalization parameter
+
+    /// Updates the finalization parameter (number of blocks required for finalization)
+    /// @param parameter New finalization parameter value
     public entry fun setFinalizationParameter(
         relay: &mut BTCRelay, 
         parameter: u64, 
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
-        // Validate parameter
+        // Validate parameter is within allowed range
         assert!(
             parameter > 0 && parameter <= MAX_FINALIZATION_PARAMETER,
             EINVALID_PARAMETER
         );
 
-        // Emit event
+        // Emit event for parameter change
         event::emit(NewFinalizationParameter {
             oldFinalizationParameter: relay.finalizationParameter,
             newFinalizationParameter: parameter
         });
 
-        // Update state
+        // Update parameter
         relay.finalizationParameter = parameter;
     }
 
-    /// @notice Setter for relayerPercentageFee
-    /// @dev A percentage of the submission gas used goes to Relayers as reward
-    /// @param fee New percentage fee
+    /// Updates the percentage fee for relayers
+    /// @param fee New percentage fee (in basis points)
     public entry fun set_relayer_percentage_fee(
         relay: &mut BTCRelay, 
         fee: u64, 
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
-        // Validate fee
+        // Validate fee is not more than 100%
         assert!(fee <= ONE_HUNDRED_PERCENT, EINVALID_PARAMETER);
 
-        // Emit event
+        // Emit event for fee change
         event::emit(NewRelayerPercentageFee {
             oldRelayerPercentageFee: relay.relayerPercentageFee,
             newRelayerPercentageFee: fee
         });
 
-        // Update state
+        // Update fee
         relay.relayerPercentageFee = fee;
     }
 
-    ///  @notice Setter for epochLength Owner only
-    ///  @param length The new epoch length
+    /// Updates the length of an epoch in blocks
+    /// @param length New epoch length
     public entry fun set_epoch_length(
         relay: &mut BTCRelay, 
         length: u64, 
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
-        // Validate length
+        // Validate length is positive
         assert!(length > 0, EINVALID_PARAMETER);
 
-        // Emit event
+        // Emit event for epoch length change
         event::emit(NewEpochLength {
             oldEpochLength: relay.epochLength,
             newEpochLength: length
         });
 
-        // Update state
+        // Update epoch length
         relay.epochLength = length;
     }
     
-    /// @notice External setter for baseQueries Owner only
-    /// @param _baseQueries The base number of queries we assume in each epoch
-    /// This prevents query fee to grow significantly
+    /// Updates the base number of queries per epoch
+    /// @param queries New base query count
     public entry fun set_base_queries(
         relay: &mut BTCRelay, 
         queries: u64, 
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
-        // Validate queries
+        // Validate queries is positive
         assert!(queries > 0, EINVALID_PARAMETER);
 
-        // Emit event
+        // Emit event for base queries change
         event::emit(NewBaseQueries {
             oldBaseQueries: relay.baseQueries,
             newBaseQueries: queries
         });
 
-        // Update state
+        // Update base queries
         relay.baseQueries = queries;
     }
     
-    /// @notice Setter for submissionGasUsed
-    /// @param gas: The gas used by Relayers for submitting a block header
+    /// Updates the gas used for header submission
+    /// @param gas New gas amount
     public entry fun set_submission_gas_used(
         relay: &mut BTCRelay, 
         gas: u64, 
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
-        // Validate gas
+        // Validate gas is positive
         assert!(gas > 0, EINVALID_PARAMETER);
 
-        // Emit event
+        // Emit event for gas change
         event::emit(NewSubmissionGasUsed {
             oldSubmissionGasUsed: relay.submissionGasUsed,
             newSubmissionGasUsed: gas
         });
 
-        // Update state
+        // Update gas
         relay.submissionGasUsed = gas;
     }
 
+    /// Pauses the relay contract
     public entry fun pause_relay(
         relay: &mut BTCRelay, 
         admin: &RELAY_ADMIN,
@@ -376,6 +431,7 @@ module teleswap::btcrelay {
         relay.paused = true;
     }
 
+    /// Unpauses the relay contract
     public entry fun unpause_relay(
         relay: &mut BTCRelay, 
         admin: &RELAY_ADMIN,
@@ -384,17 +440,24 @@ module teleswap::btcrelay {
         relay.paused = false;
     }
 
+    /// Renounces admin ownership by transferring control to zero address
     public entry fun renounce_admin_ownership(
         admin: RELAY_ADMIN,
+        upgrade_cap: UpgradeCap,
         ctx: &TxContext
     ) {
+        // Verify caller is admin
         assert!(tx_context::sender(ctx) == admin.owner, EINVALID_ADMIN);
-        // Transfer the RELAY_ADMIN object to zero address
+        
+        // Transfer admin control to zero address
         transfer::public_transfer(admin, @0x0);
+        
+        // Transfer upgrade capability to zero address
+        transfer::public_transfer(upgrade_cap, @0x0);
     }
 
-    /// @notice Same as addHeaders, but can only be called by owner even if contract is paused
-    /// It will be used if a fork happened
+    /// Admin-only version of addHeaders that works even when contract is paused
+    /// Used for handling chain forks
     public entry fun ownerAddHeaders(
         relay: &mut BTCRelay,
         anchor: vector<u8>,
@@ -402,15 +465,19 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &mut TxContext
     ): bool {
-        // Check input sizes
-        check_input_size_add_headers(&headers, &anchor);
+        // Convert hex strings to bytes
+        let anchor_bytes = BitcoinHelper::hex_to_bytes(&anchor);
+        let headers_bytes = BitcoinHelper::hex_to_bytes(&headers);
 
-        // Call internal function to add headers
-        add_headers(relay, &anchor, &headers, false, ctx)
+        // Validate input sizes
+        check_input_size_add_headers(&headers_bytes, &anchor_bytes);
+
+        // Add headers to relay
+        add_headers(relay, &anchor_bytes, &headers_bytes, false, ctx)
     }
 
-    /// @notice Same as addHeadersWithRetarget, but can only be called by owner even if contract is paused
-    /// It will be used if a fork happened
+    /// Admin-only version of addHeadersWithRetarget that works even when contract is paused
+    /// Used for handling chain forks
     public entry fun ownerAddHeadersWithRetarget(
         relay: &mut BTCRelay,
         old_period_start_header: vector<u8>,
@@ -419,27 +486,32 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &mut TxContext
     ): bool {
-        // Check input sizes
+        // Convert hex strings to bytes
+        let old_period_start_header_bytes = BitcoinHelper::hex_to_bytes(&old_period_start_header);
+        let old_period_end_header_bytes = BitcoinHelper::hex_to_bytes(&old_period_end_header);
+        let headers_bytes = BitcoinHelper::hex_to_bytes(&headers);
+
+        // Validate input sizes
         check_input_size_add_headers_with_retarget(
-            &old_period_start_header,
-            &old_period_end_header,
-            &headers
+            &old_period_start_header_bytes,
+            &old_period_end_header_bytes,
+            &headers_bytes
         );
 
-        // Call internal function to add headers with retarget
+        // Add headers with retarget validation
         add_headers_with_retarget(
             relay,
-            &old_period_start_header,
-            &old_period_end_header,
-            &headers,
+            &old_period_start_header_bytes,
+            &old_period_end_header_bytes,
+            &headers_bytes,
             ctx
         )
     }
     
     // === Package Functions ===
-    
-    
-    
+
+    /// Initializes the package when published
+    /// Creates and transfers the RELAY_ADMIN object to the deployer
     fun init(ctx: &mut TxContext) {
         // Create and transfer the RELAY_ADMIN object to the sender
         transfer::transfer(RELAY_ADMIN { 
@@ -449,10 +521,15 @@ module teleswap::btcrelay {
         }, tx_context::sender(ctx));
     }
     
+    /// Initializes the Bitcoin relay with genesis block and parameters
+    /// @param genesis_header_hex Genesis block header in hex format (big-endian)
+    /// @param height Initial block height
+    /// @param period_start_hex Start of difficulty period in hex format (big-endian)
+    /// @param finalization_parameter Number of blocks required for finalization
     public entry fun initialize(
         genesis_header_hex: vector<u8>,
         height: u64,
-        period_start: vector<u8>,
+        period_start_hex: vector<u8>,
         finalization_parameter: u64,
         admin: &mut RELAY_ADMIN,
         ctx: &mut TxContext
@@ -463,21 +540,21 @@ module teleswap::btcrelay {
         // Mark as initialized
         admin.initialized = true;
 
-        // Validate parameters
+        // Validate finalization parameter
         assert!(finalization_parameter > 0 && finalization_parameter <= MAX_FINALIZATION_PARAMETER, EINVALID_PARAMETER);
         
+        // Convert hex strings to bytes
         let genesis_header = BitcoinHelper::hex_to_bytes(&genesis_header_hex);
-        
-        // Validate genesis header
+        let period_start = BitcoinHelper::hex_to_bytes(&period_start_hex);
+       
+        // Validate genesis header size
         assert!(
             vector::length(&genesis_header) == 80,
             EINVALID_HEADER
         );
-        
-        // Get genesis hash
+
+        // Get genesis hash and create initial block header
         let genesis_hash = BitcoinHelper::hash256(&genesis_header);
-        
-        // Create initial block header
         let new_block_header = BlockHeader {
             selfHash: genesis_hash,
             parentHash: BitcoinHelper::get_parent(&genesis_header),
@@ -485,21 +562,23 @@ module teleswap::btcrelay {
             relayer: tx_context::sender(ctx),
         };
 
-        // Create chain tables
+        // Initialize chain storage
         let mut chain = table::new<u64, vector<BlockHeader>>(ctx);
         let previous_block = table::new<vector<u8>, vector<u8>>(ctx);
         let mut block_height = table::new<vector<u8>, u64>(ctx);
         
-        // Add initial header to chain
+        // Add genesis header to chain
         let mut headers = vector::empty<BlockHeader>();
         vector::push_back(&mut headers, new_block_header);
         table::add(&mut chain, height, headers);
-        
+
         // Store block heights
         table::add(&mut block_height, genesis_hash, height);
-        table::add(&mut block_height, period_start, 
-            height - (height % BitcoinHelper::get_retarget_period_blocks()));
-
+        if(height % BitcoinHelper::get_retarget_period_blocks()!=0){
+            // If genesis header is not a target header, add period start to table
+            table::add(&mut block_height, period_start, height - (height % BitcoinHelper::get_retarget_period_blocks()));
+        };
+        
         // Create and share relay object
         let relay = BTCRelay {
             id: object::new(ctx),
@@ -519,13 +598,16 @@ module teleswap::btcrelay {
             blockHeight: block_height,
         };
 
-        // Share relay
+        // Share relay object
         transfer::share_object(relay);
     }
 
     // === Private Functions ===
 
-    // Internal functions to add headers
+    /// Internal function to add headers to the relay
+    /// @param anchor Anchor block header
+    /// @param headers Headers to add
+    /// @param internal Whether this is an internal call
     fun add_headers(
         relay: &mut BTCRelay,
         anchor: &vector<u8>,
@@ -533,18 +615,18 @@ module teleswap::btcrelay {
         internal: bool,
         ctx: & TxContext
     ): bool {
-        // Extract basic info
+        // Get basic info from anchor
         let mut previous_hash = BitcoinHelper::hash256(anchor);
         let anchor_height = find_height(relay, previous_hash);
         let target = BitcoinHelper::get_target(&BitcoinHelper::index_header_array(headers, 0));
-
-        // When calling addHeaders, no retargetting should happen
+        
+        // Validate target matches anchor unless internal call
         assert!(
             internal || BitcoinHelper::get_target(anchor) == target,
             EUNEXPECTED_RETARGET
         );
 
-        // Check the height on top of the anchor is not finalized
+        // Validate header is not too old
         assert!(
             anchor_height + 1 + relay.finalizationParameter > relay.lastSubmittedHeight,
             EOUTDATE_HEADER
@@ -569,25 +651,26 @@ module teleswap::btcrelay {
             height = anchor_height + i + 1;
             current_hash = BitcoinHelper::hash256(&header);
 
-            // Check that the block header is not a replica
+            // Check for duplicate header
             assert!(
-                table::contains(&relay.previousBlock, current_hash)
-            &&  !BitcoinHelper::equalzero(table::borrow(&relay.previousBlock, current_hash)),
+                !table::contains(&relay.previousBlock, current_hash),
                 EDUPLICATE_HEADER
             );
-
+            
             // Blocks that are multiplies of 2016 should be submitted using addHeadersWithRetarget
             assert!(
-                height % BitcoinHelper::get_retarget_period_blocks() != 0,
+                internal || height % BitcoinHelper::get_retarget_period_blocks() != 0,
                 ERETARGET_REQUIRED
             );
 
-            // Check timestamp
+            // Validate timestamp
+            let current_time_ms = tx_context::epoch_timestamp_ms(ctx);
+            let current_time_seconds = current_time_ms / 1000;
             assert!(
-                BitcoinHelper::get_time(&header) < MAX_ALLOWED_GAP,
+                BitcoinHelper::get_time(&header) <= current_time_seconds + MAX_ALLOWED_GAP,
                 EINVALID_TIMESTAMP
             );
-
+            
             // Check target hasn't changed
             assert!(
                 BitcoinHelper::get_target(&header) == target,
@@ -600,7 +683,7 @@ module teleswap::btcrelay {
                 EINVALID_CHAIN
             );
 
-            // Check POW (header work is sufficient)
+            // Validate proof of work
             assert!(
                 BitcoinHelper::check_pow(&header),
                 EINVALID_POW
@@ -610,14 +693,14 @@ module teleswap::btcrelay {
             table::add(&mut relay.previousBlock, current_hash, previous_hash);
             table::add(&mut relay.blockHeight, current_hash, height);
 
-            // Emit event
+            // Emit block added event
             event::emit(BlockAdded {
                 height,
                 self_hash: current_hash,
                 parent_hash: previous_hash,
                 relayer: tx_context::sender(ctx)
             });
-
+            
             // Add to chain
             add_to_chain(relay, &header, height, ctx);
 
@@ -628,7 +711,10 @@ module teleswap::btcrelay {
         true
     }
 
-    /// @notice Adds headers to storage, performs additional validation of retarget
+    /// Internal function to add headers with difficulty retargeting
+    /// @param old_start First header in old difficulty period
+    /// @param old_end Last header in old difficulty period
+    /// @param headers New headers to add
     fun add_headers_with_retarget(
         relay: &mut BTCRelay,
         old_start: &vector<u8>,
@@ -636,13 +722,20 @@ module teleswap::btcrelay {
         headers: &vector<u8>,
         ctx: & TxContext
     ): bool {
-        // Get heights of both blocks
+        // Get block heights
         let start_hash = BitcoinHelper::hash256(old_start);
         let end_hash = BitcoinHelper::hash256(old_end);
+        event::emit(BlockAdded {
+            height: 0,
+            self_hash: start_hash,
+            parent_hash: *old_start,
+            relayer: tx_context::sender(ctx)
+        });
+
         let start_height = find_height(relay, start_hash);
         let end_height = find_height(relay, end_hash);
 
-        // Verify retarget intervals (2016 blocks)
+        // Validate retarget intervals
         assert!(
             end_height % BitcoinHelper::get_retarget_period_blocks() == 2015,
             EINVALID_HEADER
@@ -652,13 +745,13 @@ module teleswap::btcrelay {
             EINVALID_HEADER
         );
 
-        // Check difficulty period
+        // Validate difficulty period
         assert!(
             BitcoinHelper::get_diff(old_start) == BitcoinHelper::get_diff(old_end),
             EINVALID_POW
         );
 
-        // Calculate and verify new target
+        // Calculate and validate new target
         let new_start = BitcoinHelper::index_header_array(headers, 0);
         let actual_target = BitcoinHelper::get_target(&new_start);
         let expected_target = BitcoinHelper::retarget_algorithm(
@@ -667,9 +760,9 @@ module teleswap::btcrelay {
             BitcoinHelper::get_time(old_end)
         );
 
-        // Verify target matches expected
+        // Verify target matches expected using bitwise AND
         assert!(
-            actual_target <= expected_target,
+            (actual_target & expected_target) == actual_target,
             EINVALID_POW
         );
 
@@ -677,8 +770,8 @@ module teleswap::btcrelay {
         add_headers(relay, old_end, headers, true, ctx)
     }
 
+    /// Validates input sizes for addHeaders
     fun check_input_size_add_headers(headers_view: &vector<u8>, anchor_view: &vector<u8>) {
-        // Check that headers are non-empty and multiple of 80 bytes
         assert!(
             !vector::is_empty(headers_view) && vector::length(headers_view) % 80 == 0 
                 && !vector::is_empty(anchor_view) && vector::length(anchor_view) == 80,
@@ -686,12 +779,12 @@ module teleswap::btcrelay {
         );
     }
 
+    /// Validates input sizes for addHeadersWithRetarget
     fun check_input_size_add_headers_with_retarget(
         old_start_header: &vector<u8>,
         old_end_header: &vector<u8>,
         headers_view: &vector<u8>
     ) {
-        // Check that headers are non-empty and multiple of 80 bytes 
         assert!(
             !vector::is_empty(old_start_header) && vector::length(old_start_header) == 80 
          && !vector::is_empty(old_end_header) && vector::length(old_end_header) == 80
@@ -700,12 +793,11 @@ module teleswap::btcrelay {
         );
     }
 
-    /// @notice Adds a header to the chain
-    /// @dev We prune the chain if the new header finalizes any header
-    /// @param  header The new block header
-    /// @param  height The height of the new block header
+    /// Adds a header to the chain and handles finalization
+    /// @param header New block header
+    /// @param height Block height
     fun add_to_chain(relay: &mut BTCRelay, header: &vector<u8>, height: u64, ctx: &TxContext) {
-        // Prevent relayers to submit too old block headers
+        // Validate header is not too old
         assert!(
             height + relay.finalizationParameter > relay.lastSubmittedHeight,
             EOUTDATE_HEADER
@@ -719,18 +811,25 @@ module teleswap::btcrelay {
             relayer: tx_context::sender(ctx),
         };
 
-        // Add to chain
-        let headers = table::borrow_mut(&mut relay.chain, height);
-        vector::push_back(headers, new_block_header);
+        // Add header to chain
+        if (table::contains(&relay.chain, height)) {
+            let headers = table::borrow_mut(&mut relay.chain, height);
+            vector::push_back(headers, new_block_header);
+        } else {
+            let mut headers = vector::empty<BlockHeader>();
+            vector::push_back(&mut headers, new_block_header);
+            table::add(&mut relay.chain, height, headers);
+        };
 
+        // Update state and handle finalization
         if (height > relay.lastSubmittedHeight) {
             relay.lastSubmittedHeight = relay.lastSubmittedHeight + 1;
             update_fee(relay);
             prune_chain(relay);
         };
     }
-    /// @notice Reset the number of epoch users when a new epoch starts
-    /// @dev This parameter is used to calculate the fee that Relay gets from users in the next epoch
+
+    /// Updates fee parameters at epoch boundaries
     fun update_fee(relay: &mut BTCRelay) {
         if (relay.lastSubmittedHeight % relay.epochLength == 0) {
             relay.lastEpochQueries = if (relay.currentEpochQueries < relay.baseQueries) { 
@@ -742,17 +841,16 @@ module teleswap::btcrelay {
         }
     }
 
-    /// @notice Finalizes a block header and removes all the other headers in that height
-    /// @dev When chain gets pruned, we only delete blocks in the same 
-    ///      height as the finalized header. Other blocks on top of the non finalized blocks 
-    ///      will exist until their height gets finalized.
+    /// Finalizes blocks and prunes the chain
+    /// Removes all headers except the finalized one at each height
     fun prune_chain(relay: &mut BTCRelay) {
-        // Make sure that we have at least finalizationParameter blocks on relay
+        // Ensure minimum chain length for finalization
         if ((relay.lastSubmittedHeight - relay.initialHeight) >= relay.finalizationParameter) {
             let mut idx = relay.finalizationParameter;
             let mut current_height = relay.lastSubmittedHeight;
             let mut stable_idx = 0;
             
+            // Find the stable idx
             while (idx > 0) {
                 let headers = table::borrow(&relay.chain, current_height);
                 let parent_header_hash = vector::borrow(headers, stable_idx).parentHash;
@@ -761,24 +859,25 @@ module teleswap::btcrelay {
                 current_height = current_height - 1;
             };
 
-            // Keep the finalized block header and delete rest of headers
+            // Keep only the finalized header
             let headers = table::borrow_mut(&mut relay.chain, current_height);
             let finalized_header = *vector::borrow(headers, stable_idx);
-            *vector::borrow_mut(headers, 0) = finalized_header;
             
             if (vector::length(headers) > 1) {
-                // prune height, keep a finialzed header and remove others
-                let mut len = vector::length(headers);
-        
-                // Keep removing elements from the end until only one remains
-                while (len > 1) {
-                    vector::pop_back(headers);
-                    len = len - 1;
+                // prune height, remove all headers
+                while (vector::length(headers) > 0) {
+                    let removed_header = vector::pop_back(headers);
+                    if(removed_header.selfHash != finalized_header.selfHash) {
+                        // Remove the extra headers from previousBlock and blockHeight hashtables
+                        table::remove(&mut relay.previousBlock, removed_header.selfHash);
+                        table::remove(&mut relay.blockHeight, removed_header.selfHash);
+                    };
                 };
+                // Add the finalized header back to the empty vector
+                vector::push_back(headers, finalized_header);
             };
 
-            // Emit event for block finalization
-            let finalized_header = vector::borrow(headers, 0);
+            // Emit finalization event
             event::emit(BlockFinalized {
                 height: current_height,
                 self_hash: finalized_header.selfHash,
@@ -788,19 +887,9 @@ module teleswap::btcrelay {
         }
     }
 
-    /// @notice Finds the height of a header by its hash
-    /// @dev Fails if the header is unknown
-    /// @param _hash The header hash to search for
-    /// @return The height of the header
-    fun find_height(relay: &BTCRelay, hash: vector<u8>): u64 {
-        let height = *table::borrow(&relay.blockHeight, hash);
-        assert!(height != 0, EINVALID_CHAIN); // Revert if block is unknown
-        height
-    }
-
-    /// @notice Finds the index of a block header in a specific height
-    /// @param header_hash The block header hash
-    /// @param height The height that we are searching
+    /// Finds the index of a block header in a specific height
+    /// @param header_hash Block header hash
+    /// @param height Block height to search
     /// @return Index of the block header
     fun find_index(relay: &BTCRelay, header_hash: vector<u8>, height: u64): u64 {
         let headers = table::borrow(&relay.chain, height);
@@ -816,3 +905,17 @@ module teleswap::btcrelay {
     } 
 }
 
+/*
+    event::emit(DebugEvent {
+        vec1: vector::empty<u8>(), // Not using vectors for this debug
+        vec2: vector::empty<u8>(),
+        vec3: vector::empty<u8>(),
+        num1: 1,
+        num2: 2,
+        num3: 3,
+        addr1: @0x0, // Not using addresses for this debug
+        addr2: @0x0,
+        addr3: @0x0
+    });
+    return true;
+*/

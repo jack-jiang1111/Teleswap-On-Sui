@@ -16,6 +16,7 @@ TeleswapSui is a bridge protocol that:
 - Sui network connection: https://docs.sui.io/guides/developer/getting-started/local-network
 - Move language compiler
 - Git
+- Node.js and npm
 
 ## Getting Started
 
@@ -25,12 +26,64 @@ git clone https://github.com/yourusername/teleswapSui.git
 cd teleswapSui
 ```
 
-2. Build the project:
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Build the project:
 ```bash
 sui move build
 ```
 
-3. Run the tests:
+4. Start a local Sui network:
 ```bash
-sui move test
+RUST_LOG="off,sui_node=info" sui start --with-faucet
 ```
+
+5. Verify network is running:
+```bash
+curl --location --request POST 'http://127.0.0.1:9000' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "sui_getTotalTransactionBlocks",
+  "params": []
+}'
+```
+
+6. Configure local network:
+```bash
+# Create new environment
+sui client new-env --alias local --rpc http://127.0.0.1:9000
+
+# Switch to local environment
+sui client switch --env local
+
+# Check active environment
+sui client active-env
+
+# Get active address
+sui client active-address
+
+# Check gas balance
+sui client gas
+
+# Request gas from faucet if needed
+sui client faucet
+```
+
+7. Run tests:
+```bash
+# Need to start a local Sui network and get some faucet token first
+npm run test
+```
+
+8. Deploy the contract:
+```bash
+npx ts-node scripts/deploy.ts
+```
+
+## License
+MIT

@@ -1,6 +1,11 @@
 #[allow(unused)]
 module teleswap::bitcoin_helper {
-    
+    // === Imports ===
+    use sui::table::{Self, Table};
+    use sui::event;
+    use std::debug;
+    use sui::event::emit;
+
     // Constants
     const RETARGET_PERIOD_BLOCKS: u64 = 2016;
     const DIFF1_TARGET: u256 = 0x00000000FFFF0000000000000000000000000000000000000000000000000000;
@@ -8,9 +13,21 @@ module teleswap::bitcoin_helper {
     const RETARGET_PERIOD: u64 = 2 * 7 * 24 * 60 * 60;  // 2 weeks in seconds
     
     // Error codes
-    const EINVALID_HEADER: u64 = 1;
-    const EINVALID_MERKLE: u64 = 2;
-    const EINVALID_POW: u64 = 3;  
+    const EINVALID_HEADER: u64 = 101;
+    const EINVALID_MERKLE: u64 = 102;
+    const EINVALID_POW: u64 = 103;  
+
+    public struct DebugEvent has copy, drop {
+        vec1: vector<u8>,
+        vec2: vector<u8>,
+        vec3: vector<u8>,
+        num1: u256,
+        num2: u256,
+        num3: u256,
+        addr1: address,
+        addr2: address,
+        addr3: address
+    }
 
     public fun get_retarget_period_blocks(): u64 {
         RETARGET_PERIOD_BLOCKS
@@ -86,16 +103,18 @@ module teleswap::bitcoin_helper {
         // Verify that arr is a valid header 
         assert!(try_as_header(header), EINVALID_HEADER);
 
-        let mantissa = ((*vector::borrow(header, 72) as u256) << 16) | 
-                      ((*vector::borrow(header, 73) as u256) << 8) | 
-                      (*vector::borrow(header, 74) as u256);
+        // Little-endian mantissa: header[72] + (header[73] << 8) + (header[74] << 16)
+        let mantissa = (*vector::borrow(header, 72) as u256) |
+                   ((*vector::borrow(header, 73) as u256) << 8) |
+                   ((*vector::borrow(header, 74) as u256) << 16);
         
         let exponent = *vector::borrow(header, 75);
         assert!(exponent > 2, EINVALID_POW);  // Invalid target difficulty
         
-        // Calculate target: mantissa * (256 ^ (exponent - 3))
+       // 256 ** (exponent - 3)
         let base: u256 = 256;
-        mantissa * (base << ((exponent - 3) * 8))
+        let power = exponent - 3;
+        mantissa * u256_pow(base, power)
     }
 
     /// @notice         calculates the difficulty from a target
@@ -130,22 +149,24 @@ module teleswap::bitcoin_helper {
         let hash = hash256(header);
         let target = get_target(header);
         
-        // Convert hash to u256 and compare with target
-        // In Bitcoin, hash must be less than or equal to target
-        let hash_int = bytes_to_u256(&hash);
+        // Convert big endian hash to little endian hash (leading zeros) u256 
+        let hash_int = bytes_to_u256_reverse(&hash);
         hash_int <= target
     }
 
-    // Helper function to convert bytes to u256
-    fun bytes_to_u256(bytes: &vector<u8>): u256 {
+    // Helper function to convert bytes to u256, also reverse the order of the bytes
+    // Convert bytes to little-endian format
+    public fun bytes_to_u256_reverse(bytes: &vector<u8>): u256 {
         let mut result: u256 = 0;
         let len = vector::length(bytes);
-        let mut i = 0;
-        while (i < len) {
+        
+        let mut i = len;
+        while (i > 0) {
+            i = i - 1;
             result = result << 8;
             result = result + (*vector::borrow(bytes, i) as u256);
-            i = i + 1;
         };
+        
         result
     }
 
@@ -263,7 +284,28 @@ module teleswap::bitcoin_helper {
         true
     }
 
+    /// @notice Reverts a 32-byte input
+    /// @param input 32-byte input that we want to revert
+    /// @return Reverted bytes
+    public fun reverse_bytes32(input: &vector<u8>): vector<u8> {
+        assert!(vector::length(input) == 32, EINVALID_HEADER);
+        
+        let mut result = vector::empty<u8>();
+        let mut i = 32;
+        
+        while (i > 0) {
+            i = i - 1;
+            vector::push_back(&mut result, *vector::borrow(input, i));
+        };
+        
+        result
+    }
+
     public fun hex_to_bytes(hex: &vector<u8>): vector<u8> {
+
+        // Check if input length is a multiple of 160 (80 bytes per block header) or a period header hash
+        //assert!(vector::length(hex) % 160 == 0 || vector::length(hex) % 64 == 0, 300); // EINVALID_HEADER_LENGTH
+        
         let mut bytes = vector::empty<u8>();
         let mut i = 0;
         while (i < vector::length(hex)) {
@@ -343,6 +385,17 @@ module teleswap::bitcoin_helper {
         // Double SHA256
         let first_hash = std::hash::sha2_256(combined);
         std::hash::sha2_256(first_hash)
+    }
+
+    // Simple u256 exponentiation function
+    fun u256_pow(base: u256, exp: u8): u256 {
+        let mut result = 1;
+        let mut i = 0;
+        while (i < exp) {
+            result = result * base;
+            i = i + 1;
+        };
+        result
     }
 
 }

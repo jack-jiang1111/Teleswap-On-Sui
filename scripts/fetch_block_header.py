@@ -18,5 +18,7 @@ def fetch_block_header(block_height):
 
 # Example usage
 if __name__ == "__main__":
-    block_height = 896076  # You can change this to any height
-    header = fetch_block_header(block_height)
+    for i in range(201599, 201593 + 2016):
+        block_height = i
+        header = fetch_block_header(block_height)
+
