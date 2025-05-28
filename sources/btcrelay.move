@@ -524,12 +524,12 @@ module teleswap::btcrelay {
     /// Initializes the Bitcoin relay with genesis block and parameters
     /// @param genesis_header_hex Genesis block header in hex format (big-endian)
     /// @param height Initial block height
-    /// @param period_start_hex Start of difficulty period in hex format (big-endian)
+    /// @param period_start_hash Start of difficulty period in hex format (little-endian) (hash value of the start of the period)
     /// @param finalization_parameter Number of blocks required for finalization
     public entry fun initialize(
         genesis_header_hex: vector<u8>,
         height: u64,
-        period_start_hex: vector<u8>,
+        period_start_hash: vector<u8>,
         finalization_parameter: u64,
         admin: &mut RELAY_ADMIN,
         ctx: &mut TxContext
@@ -545,7 +545,7 @@ module teleswap::btcrelay {
         
         // Convert hex strings to bytes
         let genesis_header = BitcoinHelper::hex_to_bytes(&genesis_header_hex);
-        let period_start = BitcoinHelper::hex_to_bytes(&period_start_hex);
+        let period_start = BitcoinHelper::hex_to_bytes(&period_start_hash);
        
         // Validate genesis header size
         assert!(

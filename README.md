@@ -82,7 +82,12 @@ npm run test
 
 8. Deploy the contract:
 ```bash
-npx ts-node scripts/deploy.ts
+# Deploy the contract to mainnet/testnet/local 
+npx ts-node scripts/deploy/01-deploy_btc_relay.ts [network]
+
+# Modified the starting period/height in file 02-initialize_btc_relay.ts
+# Initialze the contract on mainnet/testnet/local 
+npx ts-node scripts/deploy/02-initialize_btc_relay.ts [network]
 ```
 
 ## License

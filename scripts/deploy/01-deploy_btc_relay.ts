@@ -4,8 +4,12 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { getNetwork } from './config';
-import { getActiveKeypair } from './sui.utils';
+import { getNetwork } from '../config';
+import { getActiveKeypair } from '../sui.utils';
+import { verifyUpgradeCap } from '../../tests/utils';
+// run the file to deploy the package
+// ts-node ./01-deploy_btc_relay.ts [network]
+// e.g. ts-node ./01-deploy_btc_relay.ts mainnet
 
 async function main() {
     console.log('Building package...');
@@ -20,10 +24,6 @@ async function main() {
     
     const keypair = await getActiveKeypair();
     const activeAddress = keypair.toSuiAddress();
-    console.log('Using active address:', activeAddress);
-    
-    // Remove the original keypair creation since we did it in the loop
-    // const keypair = Ed25519Keypair.fromSecretKey(fromB64(activeKey));
     
     console.log('Deploying package...');
     // Get gas coins with proper object references
@@ -66,15 +66,53 @@ async function main() {
         options: { showEffects: true }
     });
 
+    let packageId = "";
+    let upgradeCapId = "";
+    let relayAdminId = "";
+    await new Promise(resolve => setTimeout(resolve, 3000)); // wait for 3s to make sure the transaction is executed
+
+    // Verify all created objects and find UpgradeCap and RELAY_ADMIN
+    console.log('\nVerifying all created objects:');
+    for (const obj of result.effects?.created || []) {
+        const objectId = obj.reference.objectId;
+        const isUpgradeCap = await verifyUpgradeCap(client, objectId);
+        // console.log(`Object ID: ${objectId}`);
+
+        // There will be two objects created under deployer's address: UpgradeCap and RELAY_ADMIN
+        // we have to identify which one is the UpgradeCap and which one is the RELAY_ADMIN
+        if (obj.owner === 'Immutable'){
+            // This is the package ID
+            packageId = objectId;
+        }
+        if (typeof obj.owner === 'object' && 
+            obj.owner !== null && 
+            'AddressOwner' in obj.owner && 
+            obj.owner.AddressOwner === activeAddress) {
+            // Check if this is the UpgradeCap
+            if (isUpgradeCap) {
+                upgradeCapId = objectId;
+            } else{
+                relayAdminId = objectId;
+            }
+        }
+    }
+
+    if (upgradeCapId=="") {
+        throw new Error('No upgrade capability found in deployment result');
+    }
+
+    if (relayAdminId=="") {
+        throw new Error('No RELAY_ADMIN object found in deployment result');
+    }
 
     if (result.effects?.status.status === 'success') {
-        const packageId = result.effects.created?.[0].reference.objectId;
         console.log('Package deployed successfully!');
         console.log('Package ID:', packageId);
-        
+        console.log('Upgrade Cap ID:', upgradeCapId);
+        console.log('RELAY_ADMIN ID:', relayAdminId);
         fs.writeFileSync(
-            'package-id.json', 
-            JSON.stringify({ packageId }, null, 2)
+            'btc_relay.json', 
+            JSON.stringify({ packageId, upgradeCapId, relayAdminId }, null, 2)
         );
     } else {
         console.error('Deployment failed:', result.effects?.status);
@@ -83,7 +121,7 @@ async function main() {
 
 async function getBuildedModule(name: string): Promise<Uint8Array> {
     return fs.readFileSync(
-        path.join(__dirname, `../build/teleswap/bytecode_modules/${name}.mv`)
+        path.join(__dirname, `../../build/teleswap/bytecode_modules/${name}.mv`)
     );
 }
 
