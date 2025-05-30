@@ -10,10 +10,6 @@ module teleswap::btcrelay {
     use std::address::length;
     use teleswap::bitcoin_helper::hex_to_bytes;
     use teleswap::bitcoin_helper;
-    use std::vector;
-    use sui::tx_context::{Self, TxContext};
-    use sui::transfer;
-    use sui::object::{Self, UID};
 
     // === Error Codes ===
     // Error codes for various validation and operation failures
@@ -44,15 +40,15 @@ module teleswap::btcrelay {
 
     /// Admin control structure for the contract
     /// Stores initialization state and owner address
-    struct RELAY_ADMIN has key, store {
-        id: sui::object::UID,
+    public struct RELAY_ADMIN has key, store {
+        id: UID,
         initialized: bool,
         owner: address
     }
 
     /// Represents a Bitcoin block header with essential information
     /// Used for storing and verifying block headers
-    struct BlockHeader has store, drop, copy {
+    public struct BlockHeader has store, drop, copy {
         selfHash: vector<u8>,      // Hash of this block
         parentHash: vector<u8>,    // Hash of parent block
         merkleRoot: vector<u8>,    // Merkle root of transactions
@@ -61,8 +57,8 @@ module teleswap::btcrelay {
 
     /// Main contract structure for Bitcoin relay
     /// Manages the relay of Bitcoin block headers to Sui
-    struct BTCRelay has key {
-        id: sui::object::UID,
+    public struct BTCRelay has key {
+        id: UID,
         initialHeight: u64,                // Starting block height
         lastSubmittedHeight: u64,          // Most recent block height
         finalizationParameter: u64,        // Number of blocks required for finalization
@@ -84,7 +80,7 @@ module teleswap::btcrelay {
     // Events emitted for important state changes and operations
 
     /// Emitted when a new block header is added to the relay
-    struct BlockAdded has copy, drop {
+    public struct BlockAdded has copy, drop {
         height: u64,
         self_hash: vector<u8>,
         parent_hash: vector<u8>,
@@ -92,7 +88,7 @@ module teleswap::btcrelay {
     }
 
     /// Emitted when a block header is finalized
-    struct BlockFinalized has copy, drop {
+    public struct BlockFinalized has copy, drop {
         height: u64,
         self_hash: vector<u8>,
         parent_hash: vector<u8>,
@@ -100,43 +96,43 @@ module teleswap::btcrelay {
     }
 
     /// Emitted when a new transaction verification query is made
-    struct NewQuery has copy, drop {
+    public struct NewQuery has copy, drop {
         tx_id: vector<u8>,
         block_height: u64,
     }
 
     /// Emitted when finalization parameter is updated
-    struct NewFinalizationParameter has copy, drop {
+    public struct NewFinalizationParameter has copy, drop {
         oldFinalizationParameter: u64,
         newFinalizationParameter: u64
     }
 
     /// Emitted when relayer fee percentage is updated
-    struct NewRelayerPercentageFee has copy, drop {
+    public struct NewRelayerPercentageFee has copy, drop {
         oldRelayerPercentageFee: u64,
         newRelayerPercentageFee: u64
     }
 
     /// Emitted when epoch length is updated
-    struct NewEpochLength has copy, drop {
+    public struct NewEpochLength has copy, drop {
         oldEpochLength: u64,
         newEpochLength: u64
     }
 
     /// Emitted when base queries parameter is updated
-    struct NewBaseQueries has copy, drop {
+    public struct NewBaseQueries has copy, drop {
         oldBaseQueries: u64,
         newBaseQueries: u64
     }
 
     /// Emitted when submission gas used parameter is updated
-    struct NewSubmissionGasUsed has copy, drop {
+    public struct NewSubmissionGasUsed has copy, drop {
         oldSubmissionGasUsed: u64,
         newSubmissionGasUsed: u64
     }
 
     /// Debug event for development and troubleshooting
-    struct DebugEvent has copy, drop {
+    public struct DebugEvent has copy, drop {
         vec1: vector<u8>,
         vec2: vector<u8>,
         vec3: vector<u8>,
@@ -567,12 +563,12 @@ module teleswap::btcrelay {
         };
 
         // Initialize chain storage
-        let chain = table::new<u64, vector<BlockHeader>>(ctx);
+        let mut chain = table::new<u64, vector<BlockHeader>>(ctx);
         let previous_block = table::new<vector<u8>, vector<u8>>(ctx);
-        let block_height = table::new<vector<u8>, u64>(ctx);
+        let mut block_height = table::new<vector<u8>, u64>(ctx);
         
         // Add genesis header to chain
-        let headers = vector::empty<BlockHeader>();
+        let mut headers = vector::empty<BlockHeader>();
         vector::push_back(&mut headers, new_block_header);
         table::add(&mut chain, height, headers);
 
@@ -620,7 +616,7 @@ module teleswap::btcrelay {
         ctx: & TxContext
     ): bool {
         // Get basic info from anchor
-        let previous_hash = BitcoinHelper::hash256(anchor);
+        let mut previous_hash = BitcoinHelper::hash256(anchor);
         let anchor_height = find_height(relay, previous_hash);
         let target = BitcoinHelper::get_target(&BitcoinHelper::index_header_array(headers, 0));
         
@@ -645,10 +641,10 @@ module teleswap::btcrelay {
             6. Store the height
             7. store the block in the chain
         */
-        let height;
-        let current_hash;
+        let mut height;
+        let mut current_hash;
         let headers_len = vector::length(headers) / 80;
-        let i = 0;
+        let mut i = 0;
         
         while (i < headers_len) {
             let header = BitcoinHelper::index_header_array(headers, i);
@@ -820,7 +816,7 @@ module teleswap::btcrelay {
             let headers = table::borrow_mut(&mut relay.chain, height);
             vector::push_back(headers, new_block_header);
         } else {
-            let headers = vector::empty<BlockHeader>();
+            let mut headers = vector::empty<BlockHeader>();
             vector::push_back(&mut headers, new_block_header);
             table::add(&mut relay.chain, height, headers);
         };
@@ -850,9 +846,9 @@ module teleswap::btcrelay {
     fun prune_chain(relay: &mut BTCRelay) {
         // Ensure minimum chain length for finalization
         if ((relay.lastSubmittedHeight - relay.initialHeight) >= relay.finalizationParameter) {
-            let idx = relay.finalizationParameter;
-            let current_height = relay.lastSubmittedHeight;
-            let stable_idx = 0;
+            let mut idx = relay.finalizationParameter;
+            let mut current_height = relay.lastSubmittedHeight;
+            let mut stable_idx = 0;
             
             // Find the stable idx
             while (idx > 0) {
@@ -898,7 +894,7 @@ module teleswap::btcrelay {
     fun find_index(relay: &BTCRelay, header_hash: vector<u8>, height: u64): u64 {
         let headers = table::borrow(&relay.chain, height);
         let len = vector::length(headers);
-        let i = 0;
+        let mut i = 0;
         while (i < len) {
             if (vector::borrow(headers, i).selfHash == header_hash) {
                 return i

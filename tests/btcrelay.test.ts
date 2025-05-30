@@ -2133,7 +2133,7 @@ describe('BTCRelay Tests for sui', () => {
                 remove0xPrefix(firstHeader.digest_le),
                 3
             );
-            await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 0.5s until the previous transaction is processed
+            await new Promise(resolve => setTimeout(resolve, 500)); // wait for 0.5s until the previous transaction is processed
             const addHeadersTx = new TransactionBlock();
             addHeadersTx.moveCall({
                 target: `${result.packageId}::${MODULE_NAME}::addHeadersWithRetarget`,
@@ -2536,7 +2536,7 @@ describe('BTCRelay Tests for sui', () => {
 
         it('only owner can call it', async () => {
             await transferSuiToSigners(1000000000, deployer_);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1s until the previous transaction is processed
+            await new Promise(resolve => setTimeout(resolve, 500)); // wait for 1s until the previous transaction is processed
             const nonOwner = signer1;
             const addHeadersTx = new TransactionBlock();
             addHeadersTx.moveCall({
@@ -2558,7 +2558,7 @@ describe('BTCRelay Tests for sui', () => {
         });
 
         it('can be called even when the relay is paused', async () => {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1s until the previous transaction is processed
+            await new Promise(resolve => setTimeout(resolve, 500)); // wait for 1s until the previous transaction is processed
             // First pause the relay
             const pauseTx = new TransactionBlock();
             pauseTx.moveCall({
@@ -2575,7 +2575,7 @@ describe('BTCRelay Tests for sui', () => {
                 options: { showEffects: true }
             });
 
-            await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1s until the previous transaction is processed
+            await new Promise(resolve => setTimeout(resolve, 500)); // wait for 1s until the previous transaction is processed
             // Then try to add headers with retarget
             const addHeadersTx = new TransactionBlock();
             addHeadersTx.moveCall({
@@ -2598,7 +2598,7 @@ describe('BTCRelay Tests for sui', () => {
             expect(result.effects?.status?.status).toBe('success');
             expect(result.events?.some(e => e.type.includes('BlockAdded'))).toBe(true);
 
-            await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1s until the previous transaction is processed
+            await new Promise(resolve => setTimeout(resolve, 500)); // wait for 1s until the previous transaction is processed
             // Verify the height
             const verifyTx = new TransactionBlock();
             verifyTx.moveCall({
