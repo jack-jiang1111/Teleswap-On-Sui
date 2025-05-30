@@ -5,6 +5,7 @@ module teleswap::bitcoin_helper {
     use sui::event;
     use std::debug;
     use sui::event::emit;
+    use std::vector;
 
     // Constants
     const RETARGET_PERIOD_BLOCKS: u64 = 2016;
@@ -17,7 +18,7 @@ module teleswap::bitcoin_helper {
     const EINVALID_MERKLE: u64 = 102;
     const EINVALID_POW: u64 = 103;  
 
-    public struct DebugEvent has copy, drop {
+    struct DebugEvent has copy, drop {
         vec1: vector<u8>,
         vec2: vector<u8>,
         vec3: vector<u8>,
@@ -74,8 +75,8 @@ module teleswap::bitcoin_helper {
         assert!(try_as_header_array(arr), EINVALID_HEADER);
 
         let start = index * HEADER_SIZE;
-        let mut result = vector::empty<u8>();
-        let mut i = 0;
+        let result = vector::empty<u8>();
+        let i = 0;
         
         while (i < HEADER_SIZE) {
             vector::push_back(&mut result, *vector::borrow(arr, start + i));
@@ -157,10 +158,10 @@ module teleswap::bitcoin_helper {
     // Helper function to convert bytes to u256, also reverse the order of the bytes
     // Convert bytes to little-endian format
     public fun bytes_to_u256_reverse(bytes: &vector<u8>): u256 {
-        let mut result: u256 = 0;
+        let result = 0;
         let len = vector::length(bytes);
+        let i = len;
         
-        let mut i = len;
         while (i > 0) {
             i = i - 1;
             result = result << 8;
@@ -184,8 +185,8 @@ module teleswap::bitcoin_helper {
     public fun get_parent(header: &vector<u8>): vector<u8> {
         assert!(try_as_header(header), EINVALID_HEADER);
 
-        let mut result = vector::empty<u8>();
-        let mut i = 4;
+        let result = vector::empty<u8>();
+        let i = 4;
         while (i < 36) {
             vector::push_back(&mut result, *vector::borrow(header, i));
             i = i + 1;
@@ -199,8 +200,8 @@ module teleswap::bitcoin_helper {
     public fun get_merkle_root(header: &vector<u8>): vector<u8> {
         assert!(try_as_header(header), EINVALID_HEADER);
 
-        let mut result = vector::empty<u8>();
-        let mut i = 36;
+        let result = vector::empty<u8>();
+        let i = 36;
         while (i < 68) {
             vector::push_back(&mut result, *vector::borrow(header, i));
             i = i + 1;
@@ -257,7 +258,7 @@ module teleswap::bitcoin_helper {
         first_timestamp: u64,
         second_timestamp: u64
     ): u256 {
-        let mut elapsed_time = second_timestamp - first_timestamp;
+        let elapsed_time = second_timestamp - first_timestamp;
 
         // Normalize ratio to factor of 4 if very long or very short
         if (elapsed_time < RETARGET_PERIOD / 4) {
@@ -274,7 +275,7 @@ module teleswap::bitcoin_helper {
 
     public fun equalzero(data: &vector<u8>): bool {
         let len = vector::length(data);
-        let mut i = 0;
+        let i = 0;
         while (i < len) {
             if (*vector::borrow(data, i) != 0) {
                 return false
@@ -290,8 +291,8 @@ module teleswap::bitcoin_helper {
     public fun reverse_bytes32(input: &vector<u8>): vector<u8> {
         assert!(vector::length(input) == 32, EINVALID_HEADER);
         
-        let mut result = vector::empty<u8>();
-        let mut i = 32;
+        let result = vector::empty<u8>();
+        let i = 32;
         
         while (i > 0) {
             i = i - 1;
@@ -306,8 +307,8 @@ module teleswap::bitcoin_helper {
         // Check if input length is a multiple of 160 (80 bytes per block header) or a period header hash
         //assert!(vector::length(hex) % 160 == 0 || vector::length(hex) % 64 == 0, 300); // EINVALID_HEADER_LENGTH
         
-        let mut bytes = vector::empty<u8>();
-        let mut i = 0;
+        let bytes = vector::empty<u8>();
+        let i = 0;
         while (i < vector::length(hex)) {
             let high = hex_digit_to_val(*vector::borrow(hex, i));
             let low = hex_digit_to_val(*vector::borrow(hex, i + 1));
@@ -348,13 +349,13 @@ module teleswap::bitcoin_helper {
             return leaf == root
         };
 
-        let mut idx = index;
-        let mut current = leaf;
+        let idx = index;
+        let current = leaf;
 
-        let mut i = 0;
+        let i = 0;
         while (i < nodes) {
-            let mut next = vector::empty<u8>();
-            let mut j = 0;
+            let next = vector::empty<u8>();
+            let j = 0;
             while (j < 32) {
                 vector::push_back(&mut next, *vector::borrow(proof, i * 32 + j));
                 j = j + 1;
@@ -378,7 +379,7 @@ module teleswap::bitcoin_helper {
     /// @return          The double-sha256 of the concatenated hashes
     fun merkle_step(a: vector<u8>, b: vector<u8>): vector<u8> {
         // Concatenate a and b
-        let mut combined = vector::empty<u8>();
+        let combined = vector::empty<u8>();
         vector::append(&mut combined, a);
         vector::append(&mut combined, b);
         
@@ -389,8 +390,8 @@ module teleswap::bitcoin_helper {
 
     // Simple u256 exponentiation function
     fun u256_pow(base: u256, exp: u8): u256 {
-        let mut result = 1;
-        let mut i = 0;
+        let result = 1;
+        let i = 0;
         while (i < exp) {
             result = result * base;
             i = i + 1;

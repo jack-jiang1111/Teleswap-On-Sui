@@ -33,3 +33,5 @@ Thumbs.db
 
 # Deployment artifacts
 package-id.json
+
+.sol
