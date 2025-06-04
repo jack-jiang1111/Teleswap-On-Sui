@@ -7,7 +7,7 @@ import { BitcoinInterface } from '@teleportdao/bitcoin';
 import * as fs from 'fs';
 import * as path from 'path';
 import { revertBytes32, bytesToHex, parseReturnValue, hexToBytes, printEvents, hash256,verifyUpgradeCap,remove0xPrefix } from './utils';
-import { BtcRelayFactory } from './btcrelay_factory';
+import { BtcRelayFactory } from './test_factory/btcrelay_factory';
 import { Keypair } from '@mysten/sui.js/dist/cjs/cryptography';
 import { sign } from 'crypto';
 

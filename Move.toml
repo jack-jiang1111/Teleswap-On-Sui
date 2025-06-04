@@ -1,16 +1,18 @@
 [package]
 name = "teleswap"
 version = "0.0.1"
-edition = "2024.beta"
+edition = "2024"
 
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "testnet" }
 
 [addresses]
 teleswap = "0x0"
+sui = "0x2"
 bitcoin_relay = "0x010e8ac307a0acb359224a31223ed1c60766e3bc569c2178f96d4699911cacb6"
 
-[dev-dependencies]
 
-[dev-addresses]
+
+
+
 

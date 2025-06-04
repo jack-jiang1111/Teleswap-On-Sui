@@ -77,7 +77,9 @@ sui client faucet
 7. Run tests:
 ```bash
 # Need to start a local Sui network and get some faucet token first
-npm run test
+# Also need to run the test file one by one (transaction will conflict)
+npm test -- tests/btcrelay.test.ts
+npm test -- tests/telebtc.test.ts
 ```
 
 8. Deploy the contract:

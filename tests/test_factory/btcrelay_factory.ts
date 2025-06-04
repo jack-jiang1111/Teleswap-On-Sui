@@ -2,10 +2,10 @@
 import { expect } from 'vitest';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
-import { getActiveKeypair } from '../scripts/sui.utils';
+import { getActiveKeypair } from '../../scripts/sui.utils';
 import * as fs from 'fs';
 import * as path from 'path';
-import {  printEvents, verifyUpgradeCap } from './utils';
+import {  printEvents, verifyUpgradeCap } from '../utils';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 
 export async function BtcRelayFactory(genesisHeader: string, height: number, periodStart: string, finalizationParameter: number): Promise<{deployer: Ed25519Keypair , packageId: string, upgradeCapId: string, relayAdminId: string, btcRelayId: string}> {
@@ -19,10 +19,10 @@ export async function BtcRelayFactory(genesisHeader: string, height: number, per
 
     // Get modules bytecode
     const bitcoinHelperModule = fs.readFileSync(
-        path.join(__dirname, '../build/teleswap/bytecode_modules/bitcoin_helper.mv')
+        path.join(__dirname, '../../build/teleswap/bytecode_modules/bitcoin_helper.mv')
     );
     const btcrelayModule = fs.readFileSync(
-        path.join(__dirname, '../build/teleswap/bytecode_modules/btcrelay.mv')
+        path.join(__dirname, '../../build/teleswap/bytecode_modules/btcrelay.mv')
     );
     await new Promise(resolve => setTimeout(resolve, 500));
     console.log('Deploying package...');
