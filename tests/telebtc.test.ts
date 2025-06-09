@@ -3,12 +3,8 @@ import { TeleBTCFactory } from './test_factory/telebtc_factory';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
-import { getActiveKeypair } from '../scripts/sui.utils';
-import { BitcoinInterface } from '@teleportdao/bitcoin';
-import * as fs from 'fs';
-import * as path from 'path';
-import { Keypair } from '@mysten/sui.js/dist/cjs/cryptography';
-import { sign } from 'crypto';
+
+
 
 async function checkBalance(client: SuiClient, address: string, packageId: string) {
     const balance = await client.getBalance({
@@ -66,6 +62,7 @@ describe('TeleBTC Tests', () => {
     let upgradeCapId: string;
     let treasuryCapId: string;
     let capId: string;
+    let adminId: string;
     let signer1: any;
     let signer2: any;
 
@@ -77,7 +74,7 @@ describe('TeleBTC Tests', () => {
         upgradeCapId = factory.upgradeCapId;
         treasuryCapId = factory.treasuryCapId;
         capId = factory.capId;
-
+        adminId = factory.adminId;
         // Create a new test address
         signer1 = new Ed25519Keypair();
         signer2 = new Ed25519Keypair();
@@ -94,6 +91,7 @@ describe('TeleBTC Tests', () => {
         expect(upgradeCapId).toBeTruthy();
         expect(treasuryCapId).toBeTruthy();
         expect(capId).toBeTruthy();
+        expect(adminId).toBeTruthy();
     });
 
     describe('Role Management', () => {
@@ -105,8 +103,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_minter`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(newMinter)
                 ]
             });
@@ -145,8 +143,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::remove_minter`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -188,8 +186,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_burner`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -228,8 +226,8 @@ describe('TeleBTC Tests', () => {
             tx3.moveCall({
                 target: `${packageId}::telebtc::remove_burner`,
                 arguments: [
-                    tx3.object(upgradeCapId),
                     tx3.object(capId),
+                    tx3.object(adminId),
                     tx3.pure(address)
                 ]
             });
@@ -272,8 +270,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_blacklister`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -312,8 +310,8 @@ describe('TeleBTC Tests', () => {
             tx3.moveCall({
                 target: `${packageId}::telebtc::remove_blacklister`,
                 arguments: [
-                    tx3.object(upgradeCapId),
                     tx3.object(capId),
+                    tx3.object(adminId),
                     tx3.pure(address)
                 ]
             });
@@ -356,8 +354,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_minter`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -376,8 +374,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_minter`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -395,8 +393,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_burner`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -415,8 +413,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_burner`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -434,8 +432,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_blacklister`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -454,8 +452,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_blacklister`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(address)
                 ]
             });
@@ -638,8 +636,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::remove_burner`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(deployerAddress)
                 ]
             });
@@ -721,8 +719,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::set_max_mint_limit`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(newLimit)
                 ]
             });
@@ -742,8 +740,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::set_max_mint_limit`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(newLimit)
                 ]
             });
@@ -779,8 +777,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::set_epoch_length`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(newEpochLength)
                 ]
             });
@@ -800,8 +798,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::set_epoch_length`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(zeroEpochLength)
                 ]
             });
@@ -823,8 +821,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::set_epoch_length`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(newEpochLength)
                 ]
             });
@@ -866,8 +864,8 @@ describe('TeleBTC Tests', () => {
             tx.moveCall({
                 target: `${packageId}::telebtc::add_minter`,
                 arguments: [
-                    tx.object(upgradeCapId),
                     tx.object(capId),
+                    tx.object(adminId),
                     tx.pure(newMinter)
                 ]
             });

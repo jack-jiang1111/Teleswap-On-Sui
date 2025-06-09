@@ -30,6 +30,7 @@ module teleswap::btcrelay {
     const EALREADY_INITIALIZED: u64 = 14;  // Contract already initialized
     const EINVALID_HASH: u64 = 15;         // Invalid hash value
     const DEBUG_LOG: u64 = 8888;           // Debug logging code
+    const EINVALID_UPGRADE_CAP: u64 = 16;  // Invalid upgrade capability
 
     // === Constants ===
     const ONE_HUNDRED_PERCENT: u64 = 10000;        // 100% in basis points
@@ -70,7 +71,8 @@ module teleswap::btcrelay {
         lastEpochQueries: u64,             // Previous epoch query count
         relayGenesisHash: vector<u8>,      // Genesis block hash
         paused: bool,                      // Contract pause state
-        
+        adminAddress: address,             // Contract owner
+
         chain: Table<u64, vector<BlockHeader>>,           // Maps height to block headers
         previousBlock: Table<vector<u8>, vector<u8>>,     // Maps block hash to parent hash
         blockHeight: Table<vector<u8>, u64>,              // Maps block hash to height
@@ -322,6 +324,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Validate parameter is within allowed range
         assert!(
             parameter > 0 && parameter <= MAX_FINALIZATION_PARAMETER,
@@ -346,6 +349,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Validate fee is not more than 100%
         assert!(fee <= ONE_HUNDRED_PERCENT, EINVALID_PARAMETER);
 
@@ -367,6 +371,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Validate length is positive
         assert!(length > 0, EINVALID_PARAMETER);
 
@@ -388,6 +393,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Validate queries is positive
         assert!(queries > 0, EINVALID_PARAMETER);
 
@@ -409,6 +415,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Validate gas is positive
         assert!(gas > 0, EINVALID_PARAMETER);
 
@@ -428,6 +435,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         relay.paused = true;
     }
 
@@ -437,23 +445,22 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         relay.paused = false;
     }
 
     /// Renounces admin ownership by transferring control to zero address
     public entry fun renounce_admin_ownership(
+        relay: &mut BTCRelay, 
         admin: RELAY_ADMIN,
-        upgrade_cap: UpgradeCap,
         ctx: &TxContext
     ) {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Verify caller is admin
         assert!(tx_context::sender(ctx) == admin.owner, EINVALID_ADMIN);
         
         // Transfer admin control to zero address
         transfer::public_transfer(admin, @0x0);
-        
-        // Transfer upgrade capability to zero address
-        transfer::public_transfer(upgrade_cap, @0x0);
     }
 
     /// Admin-only version of addHeaders that works even when contract is paused
@@ -465,6 +472,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &mut TxContext
     ): bool {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Convert hex strings to bytes
         let anchor_bytes = BitcoinHelper::hex_to_bytes(&anchor);
         let headers_bytes = BitcoinHelper::hex_to_bytes(&headers);
@@ -486,6 +494,7 @@ module teleswap::btcrelay {
         admin: &RELAY_ADMIN,
         ctx: &mut TxContext
     ): bool {
+        assert!(admin.owner == relay.adminAddress, EINVALID_ADMIN);
         // Convert hex strings to bytes
         let old_period_start_header_bytes = BitcoinHelper::hex_to_bytes(&old_period_start_header);
         let old_period_end_header_bytes = BitcoinHelper::hex_to_bytes(&old_period_end_header);
@@ -596,6 +605,7 @@ module teleswap::btcrelay {
             chain,
             previousBlock: previous_block,
             blockHeight: block_height,
+            adminAddress: tx_context::sender(ctx),
         };
 
         // Share relay object

@@ -17,14 +17,23 @@ module teleswap::telebtc {
     const EBLACKLISTED: u64 = 9;
     const EMINT_LIMIT_EXCEEDED: u64 = 10;
     const EEPOCH_MINT_LIMIT_REACHED: u64 = 11;
+    const EINVALID_ADMIN: u64 = 12;
+
 
     // Constants
     const INITIAL_MINT_LIMIT: u64 = 100000000; // 10^8
 
     public struct TELEBTC has drop {}
 
+    /// Admin control structure for the contract
+    /// Stores owner address
+    public struct TELEBTC_ADMIN has key, store {
+        id: UID,
+        owner: address
+    }
+
     public struct TeleBTCCap has key,store {
-        id: sui::object::UID,
+        id: UID,
         minters: Table<address, bool>,
         burners: Table<address, bool>,
         blacklisters: Table<address, bool>,
@@ -33,6 +42,7 @@ module teleswap::telebtc {
         last_mint_limit: u64,
         epoch_length: u64,
         last_epoch: u64,
+        adminAddress: address,  // Store admin address for verification
     }
 
     public struct MintEvent has copy, drop {
@@ -61,7 +71,13 @@ module teleswap::telebtc {
         is_added: bool
     }
 
-    fun init(witness: TELEBTC,ctx: &mut TxContext) {
+    fun init(witness: TELEBTC, ctx: &mut TxContext) {
+        // Create and transfer the admin object to the sender
+        transfer::transfer(TELEBTC_ADMIN { 
+            id: object::new(ctx),
+            owner: tx_context::sender(ctx)
+        }, tx_context::sender(ctx));
+
         let cap = TeleBTCCap {
             id: object::new(ctx),
             minters: table::new(ctx),
@@ -72,6 +88,7 @@ module teleswap::telebtc {
             last_mint_limit: INITIAL_MINT_LIMIT,
             epoch_length: 1, // in sui mainnet, each epoch = 24hours
             last_epoch: 0,
+            adminAddress: tx_context::sender(ctx),
         };
 
         // Create the coin type
@@ -85,7 +102,6 @@ module teleswap::telebtc {
             ctx
         );
 
-
         // Share both the treasury cap and cap object so any minter can mint
         transfer::public_share_object(treasury_cap);
         // Make the metadata immutable and transfer it
@@ -96,7 +112,8 @@ module teleswap::telebtc {
     }
 
     // Role management functions
-    public fun add_minter(owner: &UpgradeCap, cap: &mut TeleBTCCap, new_minter: address, ctx: &mut TxContext) {
+    public fun add_minter(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, new_minter: address, ctx: &mut TxContext) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         if(table::contains(&cap.minters, new_minter)) {
             if(*table::borrow(&cap.minters, new_minter)) {
                 // already a minter
@@ -111,7 +128,8 @@ module teleswap::telebtc {
         event::emit(RoleEvent { account: new_minter, role_type: 1, is_added: true });
     }
 
-    public fun remove_minter(owner: &UpgradeCap, cap: &mut TeleBTCCap, minter: address) {
+    public fun remove_minter(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, minter: address) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         if(table::contains(&cap.minters, minter)&&*table::borrow(&cap.minters, minter)) {
             *table::borrow_mut(&mut cap.minters, minter) = false;
         }
@@ -121,7 +139,8 @@ module teleswap::telebtc {
         event::emit(RoleEvent { account: minter, role_type: 1, is_added: false });
     }
 
-    public fun add_burner(owner: &UpgradeCap, cap: &mut TeleBTCCap, new_burner: address, ctx: &mut TxContext) {
+    public fun add_burner(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, new_burner: address, ctx: &mut TxContext) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         if(table::contains(&cap.burners, new_burner)) {
             if(*table::borrow(&cap.burners, new_burner)) {
                 // already a burner
@@ -136,7 +155,8 @@ module teleswap::telebtc {
         event::emit(RoleEvent { account: new_burner, role_type: 2, is_added: true });
     }
 
-    public fun remove_burner(owner: &UpgradeCap, cap: &mut TeleBTCCap, burner: address) {
+    public fun remove_burner(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, burner: address) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         if(table::contains(&cap.burners, burner) && *table::borrow(&cap.burners, burner)) {
             *table::borrow_mut(&mut cap.burners, burner) = false;
         } else {
@@ -145,7 +165,8 @@ module teleswap::telebtc {
         event::emit(RoleEvent { account: burner, role_type: 2, is_added: false });
     }
 
-    public fun add_blacklister(owner: &UpgradeCap, cap: &mut TeleBTCCap, new_blacklister: address, ctx: &mut TxContext) {
+    public fun add_blacklister(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, new_blacklister: address, ctx: &mut TxContext) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         if(table::contains(&cap.blacklisters, new_blacklister)) {
             if(*table::borrow(&cap.blacklisters, new_blacklister)) {
                 // already a blacklister
@@ -160,7 +181,8 @@ module teleswap::telebtc {
         event::emit(RoleEvent { account: new_blacklister, role_type: 3, is_added: true });
     }
 
-    public fun remove_blacklister(owner: &UpgradeCap, cap: &mut TeleBTCCap, blacklister: address) {
+    public fun remove_blacklister(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, blacklister: address) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         if(table::contains(&cap.blacklisters, blacklister) && *table::borrow(&cap.blacklisters, blacklister)) {
             *table::borrow_mut(&mut cap.blacklisters, blacklister) = false;
         } else {
@@ -253,21 +275,29 @@ module teleswap::telebtc {
         true
     }
 
-
     // Admin functions
     /// Renounces admin ownership by transferring control to zero address
     public entry fun renounce_admin_ownership(
-        owner: UpgradeCap,
+        cap: &mut TeleBTCCap,
+        admin: TELEBTC_ADMIN,
         ctx: &TxContext
     ) {
-        // Transfer upgrade capability to zero address
-        transfer::public_transfer(owner, @0x0);
+        // Verify caller is admin
+        assert!(cap.adminAddress == admin.owner, EINVALID_ADMIN);
+        
+        // Transfer admin control to zero address
+        transfer::public_transfer(admin, @0x0);
     }
 
     /**
      * @dev change maximum mint limit per epoch.
      */
-    public entry fun set_max_mint_limit(owner: &UpgradeCap,cap: &mut TeleBTCCap, new_limit: u64) {
+    public entry fun set_max_mint_limit(
+        cap: &mut TeleBTCCap,
+        admin: &TELEBTC_ADMIN,
+        new_limit: u64
+    ) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         cap.max_mint_limit = new_limit;
         // emit events NewMintLimit(maxMintLimit, _mintLimit);
     }
@@ -275,7 +305,12 @@ module teleswap::telebtc {
     /**
      * @dev change blocks number per epoch.
      */
-    public entry fun set_epoch_length(owner: &UpgradeCap,cap: &mut TeleBTCCap, new_length: u64) {
+    public entry fun set_epoch_length(
+        cap: &mut TeleBTCCap,
+        admin: &TELEBTC_ADMIN,
+        new_length: u64
+    ) {
+        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         assert!(new_length > 0, EZERO_VALUE);
         cap.epoch_length = new_length;
         // emit events NewEpochLength(epochLength, _length);

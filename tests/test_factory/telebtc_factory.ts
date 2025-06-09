@@ -12,7 +12,8 @@ export async function TeleBTCFactory(): Promise<{
     packageId: string,
     upgradeCapId: string,
     treasuryCapId: string,
-    capId: string
+    capId: string,
+    adminId: string
 }> {
     const client = new SuiClient({ url: getFullnodeUrl('localnet') });
     const deployer = await getActiveKeypair();
@@ -20,6 +21,7 @@ export async function TeleBTCFactory(): Promise<{
     let upgradeCapId = "";
     let treasuryCapId = "";
     let capId = "";
+    let adminId = "";
 
 
     // Get module bytecode
@@ -67,6 +69,9 @@ export async function TeleBTCFactory(): Promise<{
         else if (type.includes('UpgradeCap')) {
             upgradeCapId = objectId;
         }
+        else if (type.includes('TELEBTC_ADMIN')) {
+            adminId = objectId;
+        }
     }
 
     if (!upgradeCapId) throw new Error('No upgrade capability found in deployment result');
@@ -78,6 +83,7 @@ export async function TeleBTCFactory(): Promise<{
     console.log('Upgrade Cap ID:', upgradeCapId);
     console.log('TreasuryCap ID:', treasuryCapId);
     console.log('TeleBTCCap ID:', capId);
+    console.log('Admin ID:', adminId);
 
-    return { deployer, packageId, upgradeCapId, treasuryCapId, capId };
+    return { deployer, packageId, upgradeCapId, treasuryCapId, capId, adminId };
 }

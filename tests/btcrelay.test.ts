@@ -1494,8 +1494,8 @@ describe('BTCRelay Tests for sui', () => {
             tx.moveCall({
                 target: `${packageId_}::${MODULE_NAME}::renounce_admin_ownership`,
                 arguments: [
-                    tx.object(relayAdminId_),
-                    tx.object(upgradeCapId_)
+                    tx.object(btcRelayId_),
+                    tx.object(relayAdminId_)
                 ]
             });
             
