@@ -94,3 +94,22 @@ npx ts-node scripts/deploy/02-initialize_btc_relay.ts [network]
 
 ## License
 MIT
+
+
+## Some note about general design (diff from evm contract)
+1. Contracts will be upgraded using the upgrade Cap. The upgrade Cap will be assigned to deployer when deploying the contract
+2. Package id won't change when upgrading the contract (In Move, the address must be known at compile time for use statements. You cannot dynamically import a module at runtime.)
+3. The bridge/locker/burner/exchange contracts will depend on each other by "use module"
+4. Development order: 
+  (1) bridge contract, a dummy locker manager contract used for testing
+  (2) bridge contract testing
+  (3) burner rounter contract, also add dummy locker manager contract for testing
+  (4) burner testing
+  (5) locker contract
+  (6) locker contract testing
+  (7) bridge contract/burner contract retesting with real locker contract
+  (8) exchange contract
+  (9) exchange contract testing
+
+locker fee needs adjust
+create object admin needs adjust

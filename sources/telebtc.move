@@ -225,7 +225,7 @@ module teleswap::telebtc {
         receiver: address,
         amount: u64,
         ctx: &mut TxContext
-    ):bool {
+    ): Coin<TELEBTC> {
         let sender = tx_context::sender(ctx);
         assert!(table::contains(&cap.minters, sender) && *table::borrow(&cap.minters, sender), ENOT_MINTER);
         assert!(amount > 0, EZERO_VALUE);
@@ -233,10 +233,8 @@ module teleswap::telebtc {
         assert!(check_and_reduce_mint_limit(cap, amount, ctx), EEPOCH_MINT_LIMIT_REACHED);
         
         let coins = coin::mint(treasury_cap, amount, ctx);
-        transfer::public_transfer(coins, receiver);
-        
         event::emit(MintEvent { minter: sender, receiver, amount });
-        true
+        coins
     }
 
     public fun burn(

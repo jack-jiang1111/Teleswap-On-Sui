@@ -16,6 +16,12 @@ module teleswap::bitcoin_helper {
     const EINVALID_HEADER: u64 = 101;
     const EINVALID_MERKLE: u64 = 102;
     const EINVALID_POW: u64 = 103;  
+    const EINVALID_VOUT: u64 = 104;
+    const EINVALID_SCRIPT: u64 = 105;
+    const EINVALID_COMPACT_INT: u64 = 106;
+    const ENON_MINIMAL_COMPACT_INT: u64 = 107;
+    const EINVALID_VOUT_LENGTH: u64 = 108;
+    const EINVALID_OP_RETURN: u64 = 109;
 
     public struct DebugEvent has copy, drop {
         vec1: vector<u8>,
@@ -32,31 +38,157 @@ module teleswap::bitcoin_helper {
     public fun get_retarget_period_blocks(): u64 {
         RETARGET_PERIOD_BLOCKS
     }
-    public fun index_compact_int(data: &vector<u8>, offset: u64): u64 {
-        0 // Placeholder
+    public fun index_compact_int(data: &vector<u8>, index: u64): u64 {
+        let flag = *vector::borrow(data, index);
+        
+        if (flag <= 0xfc) {
+            // For values <= 0xfc, the value is the flag itself
+            flag as u64
+        } else if (flag == 0xfd) {
+            // For 0xfd, read next 2 bytes as little-endian
+            let value = ((*vector::borrow(data, index + 1) as u64)) |
+                       ((*vector::borrow(data, index + 2) as u64) << 8);
+            // Verify minimal encoding
+            assert!(compact_int_length(value) == 3, ENON_MINIMAL_COMPACT_INT);
+            value
+        } else if (flag == 0xfe) {
+            // For 0xfe, read next 4 bytes as little-endian
+            let value = ((*vector::borrow(data, index + 1) as u64)) |
+                       ((*vector::borrow(data, index + 2) as u64) << 8) |
+                       ((*vector::borrow(data, index + 3) as u64) << 16) |
+                       ((*vector::borrow(data, index + 4) as u64) << 24);
+            // Verify minimal encoding
+            assert!(compact_int_length(value) == 5, ENON_MINIMAL_COMPACT_INT);
+            value
+        } else if (flag == 0xff) {
+            // For 0xff, read next 8 bytes as little-endian
+            let value = ((*vector::borrow(data, index + 1) as u64)) |
+                       ((*vector::borrow(data, index + 2) as u64) << 8) |
+                       ((*vector::borrow(data, index + 3) as u64) << 16) |
+                       ((*vector::borrow(data, index + 4) as u64) << 24) |
+                       ((*vector::borrow(data, index + 5) as u64) << 32) |
+                       ((*vector::borrow(data, index + 6) as u64) << 40) |
+                       ((*vector::borrow(data, index + 7) as u64) << 48) |
+                       ((*vector::borrow(data, index + 8) as u64) << 56);
+            // Verify minimal encoding
+            assert!(compact_int_length(value) == 9, ENON_MINIMAL_COMPACT_INT);
+            value
+        } else {
+            abort EINVALID_COMPACT_INT
+        }
     }
 
     public fun compact_int_length(value: u64): u64 {
-        0 // Placeholder
+        if (value <= 0xfc) {
+            1
+        } else if (value <= 0xffff) {
+            3
+        } else if (value <= 0xffffffff) {
+            5
+        } else {
+            9
+        }
     }
 
-    public fun output_length(remaining: &vector<u8>): u64 {
-        0 // Placeholder
+    /// @notice Verifies the vout and validates its structure
+    /// @param vout The vout data to verify
+    /// @return true if vout is valid, false otherwise
+    public fun try_as_vout(vout: &vector<u8>): bool {
+        // Check if vout is empty
+        if (vector::is_empty(vout)) {
+            return false
+        };
+
+        // Get number of outputs
+        let n_outs = index_compact_int(vout, 0);
+        if (n_outs == 0) {
+            return false
+        };
+
+        // Calculate initial offset after compact int
+        let mut offset = compact_int_length(n_outs);
+        let view_len = vector::length(vout);
+
+        // Iterate through each output
+        let mut i = 0;
+        while (i < n_outs) {
+            // Check if we've reached the end but still trying to read more
+            if (offset >= view_len) {
+                return false
+            };
+
+            // Get remaining bytes
+            let mut remaining = vector::empty<u8>();
+            let mut j = offset;
+            while (j < view_len) {
+                vector::push_back(&mut remaining, *vector::borrow(vout, j));
+                j = j + 1;
+            };
+
+            // Add output length to offset
+            offset = offset + output_length(&remaining);
+            i = i + 1;
+        };
+
+        // Verify we've consumed exactly all bytes
+        if (offset != view_len) {
+            return false
+        };
+
+        true
+    }
+
+    /// @notice Calculates the length of a transaction output
+    /// @param output The output data
+    /// @return The length in bytes
+    public fun output_length(output: &vector<u8>): u64 {
+        // Value (8 bytes) + script length (compact int) + script
+        let script_len = index_compact_int(output, 8);
+        8 + compact_int_length(script_len) + script_len
     }
 
     public fun op_return_payload_big(spk: &vector<u8>): vector<u8> {
         vector::empty() // Placeholder
     }
 
+    /// @notice Extracts the Op Return Payload
+    /// @dev Structure of the input is: 1 byte op return + 1 bytes indicating the length of payload + max length for op return payload is 75 bytes
+    /// @param spk The scriptPubkey
+    /// @return The Op Return Payload (or empty vector if not a valid Op Return output)
     public fun op_return_payload_small(spk: &vector<u8>): vector<u8> {
-        vector::empty() // Placeholder
+        // Get total script length
+        let body_length = index_compact_int(spk, 0);
+        
+        // Check if script is too long or too short
+        if (body_length > 77 || body_length < 4) {
+            return vector::empty<u8>()
+        };
+
+        // Check if first byte is OP_RETURN (0x6a)
+        if (*vector::borrow(spk, 1) != 0x6a) {
+            return vector::empty<u8>()
+        };
+
+        // Get payload length
+        let payload_len = *vector::borrow(spk, 2) as u64;
+
+        // Verify payload length matches script length
+        if (payload_len != body_length - 2) {
+            return vector::empty<u8>()
+        };
+
+        // Extract payload
+        let mut payload = vector::empty<u8>();
+        let mut i = 3;
+        while (i < 3 + payload_len) {
+            vector::push_back(&mut payload, *vector::borrow(spk, i));
+            i = i + 1;
+        };
+
+        payload
     }
 
     public fun try_as_vin(vin: &vector<u8>): bool {
-        false // Placeholder
-    }
-
-    public fun try_as_vout(vout: &vector<u8>): bool {
         false // Placeholder
     }
 
@@ -396,6 +528,145 @@ module teleswap::bitcoin_helper {
             i = i + 1;
         };
         result
+    }
+
+    /// @notice Parses the BTC amount and the op_return of a transaction
+    /// @dev Finds the BTC amount that has been sent to the locking script
+    /// Assumes that payload size is less than 76 bytes
+    /// @param vout The vout of a Bitcoin transaction
+    /// @param locking_script Desired locking script
+    /// @return (bitcoin_amount, arbitrary_data) Amount of BTC sent to the locking script and opreturn data
+    public fun parse_value_and_data_having_locking_script_small_payload(
+        vout: &vector<u8>,
+        locking_script: &vector<u8>
+    ): (u64, vector<u8>) {
+        // Check that vout is valid
+        assert!(try_as_vout(vout), EINVALID_VOUT);
+
+        let mut bitcoin_amount = 0u64;
+        let mut arbitrary_data = vector::empty<u8>();
+        
+        // Get number of outputs
+        let number_of_outputs = index_compact_int(vout, 0);
+        
+        let mut i = 0;
+        while (i < number_of_outputs) {
+            let output = index_vout(vout, i);
+            let script_pubkey = script_pubkey(&output);
+            let script_pubkey_with_length = script_pubkey_with_length(&output);
+            let op_return_data = op_return_payload_small(&script_pubkey_with_length);
+
+            // Check if this is an op_return output
+            if (vector::is_empty(&op_return_data)) {
+                // Not an op_return, check if it matches our locking script
+                if (script_pubkey == *locking_script) {
+                    bitcoin_amount = value(&output);
+                }
+            } else {
+                // This is an op_return output, store the data
+                arbitrary_data = op_return_data;
+            };
+            i = i + 1;
+        };
+
+        (bitcoin_amount, arbitrary_data)
+    }
+
+    /// @notice Gets the value from a Bitcoin transaction output
+    /// @param output The transaction output
+    /// @return The value in satoshis
+    fun value(output: &vector<u8>): u64 {
+        // Value is stored in the first 8 bytes in little-endian format
+        ((*vector::borrow(output, 0) as u64)) |
+        ((*vector::borrow(output, 1) as u64) << 8) |
+        ((*vector::borrow(output, 2) as u64) << 16) |
+        ((*vector::borrow(output, 3) as u64) << 24) |
+        ((*vector::borrow(output, 4) as u64) << 32) |
+        ((*vector::borrow(output, 5) as u64) << 40) |
+        ((*vector::borrow(output, 6) as u64) << 48) |
+        ((*vector::borrow(output, 7) as u64) << 56)
+    }
+
+    /// @notice Gets the script pubkey from a Bitcoin transaction output
+    /// @param output The transaction output
+    /// @return The script pubkey without length prefix
+    fun script_pubkey(output: &vector<u8>): vector<u8> {
+        let script_length = *vector::borrow(output, 8) as u64;
+        let mut script = vector::empty<u8>();
+        let mut i = 9;
+        while (i < 9 + script_length) {
+            vector::push_back(&mut script, *vector::borrow(output, i));
+            i = i + 1;
+        };
+        script
+    }
+
+    /// @notice Gets the script pubkey with length prefix from a Bitcoin transaction output
+    /// @param output The transaction output
+    /// @return The script pubkey with length prefix
+    fun script_pubkey_with_length(output: &vector<u8>): vector<u8> {
+        let script_length = *vector::borrow(output, 8) as u64;
+        let mut script = vector::empty<u8>();
+        vector::push_back(&mut script, *vector::borrow(output, 8)); // Push length byte
+        let mut i = 9;
+        while (i < 9 + script_length) {
+            vector::push_back(&mut script, *vector::borrow(output, i));
+            i = i + 1;
+        };
+        script
+    }
+
+    /// @notice Gets a specific output from a vout array
+    /// @param vout The vout array
+    /// @param index The index of the output to get
+    /// @return The output at the specified index
+    fun index_vout(vout: &vector<u8>, index: u64): vector<u8> {
+        let mut offset = compact_int_length(index_compact_int(vout, 0));
+        let mut i = 0;
+        while (i < index) {
+            // Get the script length from the current position
+            let script_len = index_compact_int(vout, offset + 8);
+            // Add 8 bytes for value + script length bytes + script length
+            offset = offset + 8 + compact_int_length(script_len) + script_len;
+            i = i + 1;
+        };
+        // Get the script length for the target output
+        let script_len = index_compact_int(vout, offset + 8);
+        let output_len = 8 + compact_int_length(script_len) + script_len;
+        let mut output = vector::empty<u8>();
+        let mut j = 0;
+        while (j < output_len) {
+            vector::push_back(&mut output, *vector::borrow(vout, offset + j));
+            j = j + 1;
+        };
+        output
+    }
+
+    /// @notice Calculates the required transaction Id from the transaction details
+    /// @dev Calculates the hash of transaction details two consecutive times
+    /// @param version Version of the transaction
+    /// @param vin Inputs of the transaction
+    /// @param vout Outputs of the transaction
+    /// @param locktime Lock time of the transaction
+    /// @return Transaction Id of the transaction (in LE form)
+    public fun calculate_tx_id(
+        version: vector<u8>,
+        vin: vector<u8>,
+        vout: vector<u8>,
+        locktime: vector<u8>
+    ): vector<u8> {
+        // Concatenate all transaction components
+        let mut tx_data = vector::empty<u8>();
+        vector::append(&mut tx_data, version);
+        vector::append(&mut tx_data, vin);
+        vector::append(&mut tx_data, vout);
+        vector::append(&mut tx_data, locktime);
+
+        // First SHA-256 hash
+        let hash1 = std::hash::sha2_256(tx_data);
+
+        // Second SHA-256 hash
+        std::hash::sha2_256(hash1)
     }
 
 }
