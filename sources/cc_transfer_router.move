@@ -1,14 +1,12 @@
-#[allow(unused, lint(self_transfer),lint(share_owned))]
+#[allow( lint(self_transfer),lint(share_owned))]
 module teleswap::cc_transfer_router {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
-    use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
+    use teleswap::telebtc::{TeleBTCCap, TELEBTC};
     use teleswap::btcrelay::{Self, BTCRelay};
     use teleswap::dummy_locker::{Self, LockerCapability};
     use teleswap::bitcoin_helper;
     use teleswap::request_parser;
-    use sui::coin::{Self, Coin, TreasuryCap};
-    use sui::sui::SUI;
-    use sui::table::{Self, Table};
+    use sui::coin::{Self, TreasuryCap};
     use sui::event;
 
     // === Error Codes ===
@@ -19,14 +17,12 @@ module teleswap::cc_transfer_router {
     const EINVALID_APP_ID: u64 = 14;
     const EINVALID_FEE: u64 = 15;
     const EINVALID_SPEED: u64 = 16;
-    const EINSUFFICIENT_FEE: u64 = 17;
-    const EINVALID_CAPABILITY: u64 = 18;
     const EINVALID_SENDER: u64 = 19;
     const EREQUEST_TOO_OLD: u64 = 20;
     const EREQUEST_USED: u64 = 21;
     const ENONZERO_LOCKTIME: u64 = 22;
     const ETX_NOT_FINALIZED: u64 = 23;
-
+    const EALREADY_INITIALIZED: u64 = 24;
     // === Events ===
 
     /// Emitted when a new wrap request is completed
@@ -40,13 +36,6 @@ module teleswap::cc_transfer_router {
         amounts: vector<u64>,               // [inputAmount, teleBTCAmount]
         fees: vector<u64>,                  // [network fee, locker fee, protocol fee, third party fee]
         third_party_id: u8                  // ID of the third party service
-    }
-
-    /// Emitted when locker fee is updated
-    /// Contains the old and new fee values
-    public struct LockerFeeUpdated has copy, drop {
-        old_fee: u64,
-        new_fee: u64
     }
 
     // === Initialization Functions ===
@@ -68,7 +57,6 @@ module teleswap::cc_transfer_router {
     /// @param special_teleporter Special teleporter address
     /// @param treasury Treasury address for fee collection
     /// @param locker_percentage_fee Locker fee percentage (0-10000)
-    /// @param reward_distributor Address for reward distribution
     /// @param admin Admin capability object
     /// @param ctx Transaction context
     public fun initialize(
@@ -78,10 +66,10 @@ module teleswap::cc_transfer_router {
         special_teleporter: address,
         treasury: address,
         locker_percentage_fee: u64,
-        reward_distributor: address,
-        admin: &CC_TRANSFER_ADMIN,
+        admin: &mut CC_TRANSFER_ADMIN,
         ctx: &mut TxContext
     ){
+        assert!(!cc_transfer_router_storage::get_initialized(admin), EALREADY_INITIALIZED);
         let router = cc_transfer_router_storage::create_cc_transfer_router(
             admin,
             starting_block_number,
@@ -90,10 +78,10 @@ module teleswap::cc_transfer_router {
             special_teleporter,
             treasury,
             locker_percentage_fee,
-            reward_distributor,
             ctx
         );
         transfer::public_share_object(router);
+        cc_transfer_router_storage::set_initialized(admin);
     }
 
     // === Core Functions ===
@@ -108,7 +96,6 @@ module teleswap::cc_transfer_router {
     /// @param relay The Bitcoin relay instance
     /// @return True if transaction is confirmed on Bitcoin
     fun is_confirmed(
-        router: &mut CCTransferRouterCap,
         tx_id: vector<u8>,
         block_number: u64,
         intermediate_nodes: vector<u8>,
@@ -139,7 +126,7 @@ module teleswap::cc_transfer_router {
     /// @param ctx The transaction context
     /// @return Tuple of (amount, remained_amount, network_fee, locker_fee, protocol_fee, third_party_fee, recipient_address)
     fun mint_and_distribute(
-        router: &mut CCTransferRouterCap,
+        router: & CCTransferRouterCap,
         locker_cap: &mut LockerCapability,
         locker_locking_script: vector<u8>,
         tx_id: vector<u8>,
@@ -200,8 +187,7 @@ module teleswap::cc_transfer_router {
         router: &mut CCTransferRouterCap,
         locker_locking_script: vector<u8>,
         vout: vector<u8>,
-        tx_id: vector<u8>,
-        ctx: &mut TxContext
+        tx_id: vector<u8>
     ) {
         // Verify locker exists
         assert!(dummy_locker::is_locker(locker_locking_script), EINVALID_LOCKER);
@@ -240,7 +226,6 @@ module teleswap::cc_transfer_router {
             input_amount,
             network_fee,
             third_party_id,
-            ctx
         );
     }
 
@@ -310,14 +295,12 @@ module teleswap::cc_transfer_router {
             router,
             locker_locking_script,
             cc_transfer_router_storage::get_vout(&tx_and_proof),
-            tx_id,
-            ctx
+            tx_id
         );
 
         // Verify transaction is confirmed
         assert!(
             is_confirmed(
-                router, 
                 tx_id, 
                 cc_transfer_router_storage::get_block_number(&tx_and_proof), 
                 cc_transfer_router_storage::get_intermediate_nodes(&tx_and_proof), 

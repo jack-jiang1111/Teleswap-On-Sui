@@ -1,4 +1,4 @@
-#[allow(unused, lint(self_transfer))]
+#[allow( lint(self_transfer))]
 module teleswap::cc_transfer_router_storage {
     use sui::table::{Self, Table};
     use sui::event;
@@ -6,15 +6,7 @@ module teleswap::cc_transfer_router_storage {
     // === Error Codes ===
     const EINVALID_PARAMETER: u64 = 0;
     const EINVALID_ADMIN: u64 = 1;
-    const EALREADY_INITIALIZED: u64 = 2;
     const EZERO_ADDRESS: u64 = 3;
-    const EPROTOCOL_FEE_OUT_OF_RANGE: u64 = 4;
-    const ELOW_STARTING_BLOCK: u64 = 5;
-    const EINVALID_SENDER: u64 = 6;
-    const EREQUEST_TOO_OLD: u64 = 7;
-    const EREQUEST_USED: u64 = 8;
-    const ENONZERO_LOCKTIME: u64 = 9;
-    const ETX_NOT_FINALIZED: u64 = 10;
     const EINVALID_THIRD_PARTY: u64 = 19;
 
     // === Constants ===
@@ -47,7 +39,8 @@ module teleswap::cc_transfer_router_storage {
     /// Stores owner address
     public struct CC_TRANSFER_ADMIN has key, store {
         id: UID,                      // Unique identifier
-        owner: address                // Admin owner address
+        owner: address,                // Admin owner address
+        initialized: bool              // Whether the admin has been initialized
     }
 
     /// Main contract structure for CC transfer router
@@ -60,7 +53,6 @@ module teleswap::cc_transfer_router_storage {
         special_teleporter: address,  // Special teleporter address
         treasury: address,            // Treasury address for fee collection
         locker_percentage_fee: u64,   // Locker fee percentage (0-10000)
-        reward_distributor: address,  // Reward distributor address
         
         // Storage tables
         transfer_requests: Table<vector<u8>, CCTransferRequest>,  // Maps tx_id to transfer request
@@ -79,12 +71,6 @@ module teleswap::cc_transfer_router_storage {
         recipient: address,          // Recipient address
         amount: u64,                 // Transfer amount
         network_fee: u64             // Network fee
-    }
-
-    /// Emitted when special teleporter address is updated
-    public struct NewSpecialTeleporter has copy, drop {
-        old_special_teleporter: address,  // Previous teleporter address
-        new_special_teleporter: address   // New teleporter address
     }
 
     /// Emitted when protocol fee is updated
@@ -125,7 +111,7 @@ module teleswap::cc_transfer_router_storage {
     /// @param network_fee Network fee in satoshis
     /// @param third_party_id Third party service identifier
     /// @param ctx Transaction context
-    public fun create_transfer_request(
+    public(package) fun create_transfer_request(
         router: &mut CCTransferRouterCap,
         tx_id: vector<u8>,
         speed: u8,
@@ -133,7 +119,6 @@ module teleswap::cc_transfer_router_storage {
         amount: u64,
         network_fee: u64,
         third_party_id: u8,
-        ctx: &TxContext
     ) {
         let request = CCTransferRequest {
             inputAmount: amount,
@@ -166,10 +151,9 @@ module teleswap::cc_transfer_router_storage {
     /// @param special_teleporter Special teleporter address
     /// @param treasury Treasury address for fee collection
     /// @param locker_percentage_fee Locker fee percentage (0-10000)
-    /// @param reward_distributor Reward distributor address
     /// @param ctx Transaction context
     /// @return New CC transfer router instance
-    public fun create_cc_transfer_router(
+    public(package) fun create_cc_transfer_router(
         admin: &CC_TRANSFER_ADMIN,
         starting_block_number: u64,
         app_id: u8,
@@ -177,7 +161,6 @@ module teleswap::cc_transfer_router_storage {
         special_teleporter: address,
         treasury: address,
         locker_percentage_fee: u64,
-        reward_distributor: address,
         ctx: &mut TxContext
     ): CCTransferRouterCap {
         // Validate fee percentages
@@ -193,7 +176,6 @@ module teleswap::cc_transfer_router_storage {
             special_teleporter,
             treasury,
             locker_percentage_fee,
-            reward_distributor,
             transfer_requests: table::new(ctx),
             third_party_fees: table::new(ctx),
             third_party_addresses: table::new(ctx),
@@ -205,10 +187,11 @@ module teleswap::cc_transfer_router_storage {
     /// Creates a new admin instance
     /// Transfers admin control to the sender
     /// @param ctx Transaction context
-    public fun create_admin(ctx: &mut TxContext) {
+    public(package) fun create_admin(ctx: &mut TxContext) {
         transfer::public_transfer(CC_TRANSFER_ADMIN {
             id: object::new(ctx),
-            owner: tx_context::sender(ctx)
+            owner: tx_context::sender(ctx),
+            initialized: false
         }, tx_context::sender(ctx));
     }
 
@@ -304,8 +287,7 @@ module teleswap::cc_transfer_router_storage {
     /// @param ctx Transaction context
     public fun renounce_admin_ownership(
         router: &mut CCTransferRouterCap,
-        admin: CC_TRANSFER_ADMIN,
-        ctx: &mut TxContext
+        admin: CC_TRANSFER_ADMIN
     ) {
         assert_admin(admin.owner, router);
         transfer::public_transfer(admin, @0x0);
@@ -582,5 +564,13 @@ module teleswap::cc_transfer_router_storage {
     /// @return Network fee in satoshis
     public fun get_fee(request: &CCTransferRequest): u64 {
         request.fee
+    }
+
+    public fun set_initialized(admin: &mut CC_TRANSFER_ADMIN) {
+        admin.initialized = true;
+    }
+
+    public fun get_initialized(admin: &CC_TRANSFER_ADMIN): bool {
+        admin.initialized
     }
 } 
