@@ -121,7 +121,7 @@ async function main() {
 
 async function getBuildedModule(name: string): Promise<Uint8Array> {
     return fs.readFileSync(
-        path.join(__dirname, `../../build/teleswap/bytecode_modules/${name}.mv`)
+        path.join(__dirname, `../../btcrelay-package/build/btcrelay/bytecode_modules/${name}.mv`)
     );
 }
 

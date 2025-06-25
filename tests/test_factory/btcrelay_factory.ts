@@ -8,22 +8,33 @@ import * as path from 'path';
 import {  printEvents, verifyUpgradeCap } from '../utils';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 
-export async function BtcRelayFactory(genesisHeader: string, height: number, periodStart: string, finalizationParameter: number): Promise<{deployer: Ed25519Keypair , packageId: string, upgradeCapId: string, relayAdminId: string, btcRelayId: string}> {
+export async function BtcRelayFactory(genesisHeader: string, height: number, periodStart: string, finalizationParameter: number,mock: boolean = false): Promise<{deployer: Ed25519Keypair , packageId: string, upgradeCapId: string, relayAdminId: string, btcRelayId: string}> {
     const client = new SuiClient({ url: getFullnodeUrl('localnet') });
     const deployer = await getActiveKeypair();
     let packageId= "";
     let relayAdminId= "";
     let upgradeCapId= "";
-    let MODULE_NAME = 'btcrelay';
+    let MODULE_NAME = "";
+
     let btcRelayId= "";
 
     // Get modules bytecode
     const bitcoinHelperModule = fs.readFileSync(
-        path.join(__dirname, '../../build/teleswap/bytecode_modules/bitcoin_helper.mv')
+        path.join(__dirname, '../../btcrelay-package/build/btcrelay/bytecode_modules/bitcoin_helper.mv')
     );
-    const btcrelayModule = fs.readFileSync(
-        path.join(__dirname, '../../build/teleswap/bytecode_modules/btcrelay.mv')
-    );
+    let btcrelayModule: Buffer;
+    if (mock) {
+        btcrelayModule = fs.readFileSync(
+            path.join(__dirname, '../../btcrelay-package/build/btcrelay/bytecode_modules/btcrelay_mock.mv')
+        );
+        MODULE_NAME = 'btcrelay_mock';
+    }
+    else{
+        btcrelayModule = fs.readFileSync(
+            path.join(__dirname, '../../btcrelay-package/build/btcrelay/bytecode_modules/btcrelay.mv')
+        );
+        MODULE_NAME = 'btcrelay';
+    }
     await new Promise(resolve => setTimeout(resolve, 500));
     console.log('Deploying package...');
     let tx = new TransactionBlock();

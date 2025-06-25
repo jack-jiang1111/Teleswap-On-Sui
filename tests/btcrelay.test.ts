@@ -58,13 +58,6 @@ describe('BTCRelay Tests for sui', () => {
     // Genesis configuration
     let genesisHeight = 99 * 2016 + 0 * 63; // 201537
     
-    // Get modules bytecode
-    const bitcoinHelperModule = fs.readFileSync(
-        path.join(__dirname, '../build/teleswap/bytecode_modules/bitcoin_helper.mv')
-    );
-    const btcrelayModule = fs.readFileSync(
-        path.join(__dirname, '../build/teleswap/bytecode_modules/btcrelay.mv')
-    );
 
     // testing different scenarios
     describe('Initialization', () => {

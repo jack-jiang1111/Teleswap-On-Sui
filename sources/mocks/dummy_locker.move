@@ -2,7 +2,7 @@
 module teleswap::dummy_locker {
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::balance::{Self, Balance};
-    use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
+    use telebtc::telebtc::{Self, TeleBTCCap, TELEBTC};
 
     /// Error codes
     const ENOT_LOCKER: u64 = 1;

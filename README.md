@@ -80,6 +80,7 @@ sui client faucet
 # Also need to run the test file one by one (transaction will conflict)
 npm test -- tests/btcrelay.test.ts
 npm test -- tests/telebtc.test.ts
+npm test -- tests/transfer.test.ts
 ```
 
 8. Deploy the contract:
@@ -101,7 +102,7 @@ MIT
 2. Package id won't change when upgrading the contract (In Move, the address must be known at compile time for use statements. You cannot dynamically import a module at runtime.)
 3. The bridge/locker/burner/exchange contracts will depend on each other by "use module"
 4. Development order: 
-  (1) bridge contract, a dummy locker manager contract used for testing
+
   (2) bridge contract testing
   (3) burner rounter contract, also add dummy locker manager contract for testing
   (4) burner testing
@@ -111,5 +112,11 @@ MIT
   (8) exchange contract
   (9) exchange contract testing
 
+-- Need to update deploy script due to directory messed up
 locker fee needs adjust
-create object admin needs adjust
+
+Deployer order:
+1. btcrelay_mock,telebtc,bitcoin_helper,dummy_locker,request_parser,cc_transfer_router_storage,cc_transfer_router
+2. initialize btcrelay
+3. give locker contract mine ability
+4. initialize transfer_router 

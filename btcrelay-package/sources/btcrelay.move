@@ -1,15 +1,15 @@
 #[allow(unused)]
-module teleswap::btcrelay {
+module btcrelay::btcrelay {
     
     // === Imports ===
     use sui::table::{Self, Table};
     use sui::event;
     use sui::package::{Self, UpgradeCap};
-    use teleswap::bitcoin_helper::{Self as BitcoinHelper}; // Helper module for Bitcoin-specific operations
+    use btcrelay::bitcoin_helper::{Self as BitcoinHelper}; // Helper module for Bitcoin-specific operations
     use std::debug;
     use std::address::length;
-    use teleswap::bitcoin_helper::hex_to_bytes;
-    use teleswap::bitcoin_helper;
+    use btcrelay::bitcoin_helper::hex_to_bytes;
+    use btcrelay::bitcoin_helper;
 
     // === Error Codes ===
     // Error codes for various validation and operation failures

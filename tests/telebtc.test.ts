@@ -476,7 +476,9 @@ describe('TeleBTC Tests', () => {
             const receiver = deployer.toSuiAddress();
             const amount = 1000;
             await new Promise(resolve => setTimeout(resolve, 1000));
-            tx.moveCall({
+            
+            // Call mint and get the returned coin
+            const [mintedCoin] = tx.moveCall({
                 target: `${packageId}::telebtc::mint`,
                 arguments: [
                     tx.object(capId),
@@ -485,6 +487,9 @@ describe('TeleBTC Tests', () => {
                     tx.pure(amount)
                 ]
             });
+
+            // Transfer the minted coin to the receiver
+            tx.transferObjects([mintedCoin], tx.pure(receiver));
 
             let result = await client.signAndExecuteTransactionBlock({
                 transactionBlock: tx,
@@ -504,7 +509,8 @@ describe('TeleBTC Tests', () => {
             const tx = new TransactionBlock();
             const amount = 1000;
 
-            tx.moveCall({
+            // Call mint and get the returned coin
+            const [mintedCoin] = tx.moveCall({
                 target: `${packageId}::telebtc::mint`,
                 arguments: [
                     tx.object(capId),
@@ -513,6 +519,10 @@ describe('TeleBTC Tests', () => {
                     tx.pure(amount)
                 ]
             });
+
+            // Transfer the minted coin to the signer1
+            tx.transferObjects([mintedCoin], tx.pure(signer1.toSuiAddress()));
+
             try{
                 await client.signAndExecuteTransactionBlock({
                     transactionBlock: tx,
@@ -539,7 +549,7 @@ describe('TeleBTC Tests', () => {
             // Mint tokens for deployer
             let tx = new TransactionBlock();
             const mintAmount = 1000;
-            tx.moveCall({
+            const [mintedCoin] = tx.moveCall({
                 target: `${packageId}::telebtc::mint`,
                 arguments: [
                     tx.object(capId),
@@ -548,6 +558,9 @@ describe('TeleBTC Tests', () => {
                     tx.pure(mintAmount)
                 ]
             });
+
+            // Transfer the minted coin to deployer
+            tx.transferObjects([mintedCoin], tx.pure(deployer.toSuiAddress()));
 
             let result = await client.signAndExecuteTransactionBlock({
                 transactionBlock: tx,
@@ -599,6 +612,7 @@ describe('TeleBTC Tests', () => {
                 coinType: `${packageId}::telebtc::TELEBTC`
             });
             const balanceBeforeBurn = await checkBalance(client, deployerAddress, packageId);
+            
             // Now deployer should be able to burn tokens
             let tx = new TransactionBlock();
             const burnAmount = 500;

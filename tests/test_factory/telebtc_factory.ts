@@ -26,7 +26,7 @@ export async function TeleBTCFactory(): Promise<{
 
     // Get module bytecode
     const telebtcModule = fs.readFileSync(
-        path.join(__dirname, '../../build/teleswap/bytecode_modules/telebtc.mv')
+        path.join(__dirname, '../../telebtc-package/build/telebtc/bytecode_modules/telebtc.mv')
     );
     console.log('Deploying telebtc package...');
     let tx = new TransactionBlock();
@@ -38,7 +38,7 @@ export async function TeleBTCFactory(): Promise<{
 
     // Transfer the UpgradeCap to the deployer
     tx.transferObjects([upgradeCap], tx.pure(deployer.toSuiAddress()));
-    
+    await new Promise(resolve => setTimeout(resolve, 1000));
     let result = await client.signAndExecuteTransactionBlock({
         transactionBlock: tx,
         signer: deployer,

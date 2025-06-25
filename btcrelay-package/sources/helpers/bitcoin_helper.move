@@ -1,5 +1,5 @@
 #[allow(unused)]
-module teleswap::bitcoin_helper {
+module btcrelay::bitcoin_helper {
     // === Imports ===
     use sui::table::{Self, Table};
     use sui::event;
