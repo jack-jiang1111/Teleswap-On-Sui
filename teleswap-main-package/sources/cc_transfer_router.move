@@ -1,10 +1,10 @@
 #[allow( lint(self_transfer),lint(share_owned))]
 module teleswap::cc_transfer_router {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
-    use teleswap::telebtc::{TeleBTCCap, TELEBTC};
-    use teleswap::btcrelay::{Self, BTCRelay};
+    use telebtc::telebtc::{TeleBTCCap, TELEBTC};
+    use btcrelay::btcrelay::{Self, BTCRelay};
     use teleswap::dummy_locker::{Self, LockerCapability};
-    use teleswap::bitcoin_helper;
+    use btcrelay::bitcoin_helper;
     use teleswap::request_parser;
     use sui::coin::{Self, TreasuryCap};
     use sui::event;

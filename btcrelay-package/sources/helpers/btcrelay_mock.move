@@ -191,7 +191,7 @@ module btcrelay::btcrelay_mock {
         transfer::share_object(relay);
     }
 
-    public fun set_test_value(relay: &mut BTCRelay, value: bool) {
+    public fun set_mock_return(relay: &mut BTCRelay, value: bool) {
         relay.test_Value = value;
     }
 }

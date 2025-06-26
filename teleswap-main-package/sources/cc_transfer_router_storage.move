@@ -573,4 +573,33 @@ module teleswap::cc_transfer_router_storage {
     public fun get_initialized(admin: &CC_TRANSFER_ADMIN): bool {
         admin.initialized
     }
+
+    /// Creates a new TxAndProof instance
+    /// @param version Bitcoin transaction version
+    /// @param vin Transaction inputs
+    /// @param vout Transaction outputs
+    /// @param locktime Transaction locktime
+    /// @param block_number Block height containing the transaction
+    /// @param intermediate_nodes Merkle proof nodes
+    /// @param index Transaction index in block
+    /// @return New TxAndProof instance
+    public fun create_tx_and_proof(
+        version: vector<u8>,
+        vin: vector<u8>,
+        vout: vector<u8>,
+        locktime: vector<u8>,
+        block_number: u64,
+        intermediate_nodes: vector<u8>,
+        index: u64
+    ): TxAndProof {
+        TxAndProof {
+            version,
+            vin,
+            vout,
+            locktime,
+            block_number,
+            intermediate_nodes,
+            index
+        }
+    }
 } 

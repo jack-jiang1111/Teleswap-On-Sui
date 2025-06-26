@@ -19,6 +19,16 @@ module teleswap::dummy_locker {
         id: UID
     }
 
+    /// Initialize the dummy locker module
+    /// Creates and transfers the LockerCapability to the deployer
+    /// @param ctx The transaction context
+    public fun init(ctx: &mut TxContext) {
+        let locker_cap = LockerCapability {
+            id: object::new(ctx)
+        };
+        transfer::public_transfer(locker_cap, tx_context::sender(ctx));
+    }
+
     /// Check if a given locking script is a valid locker
     public fun is_locker(_locking_script: vector<u8>): bool {
         // Placeholder implementation - always returns true for now
@@ -43,7 +53,7 @@ module teleswap::dummy_locker {
     ): (Coin<TELEBTC>, address) {
         // Call the telebtc mint function and return the minted coins
         let coins = telebtc::mint(telebtc_cap, treasury_cap, receiver, amount, ctx);
-        let locker_address = @0x0; // just a place holder, will implement later when doing the locker contract
+        let locker_address = @0x0000000000000000000000000000000000000000000000000000000000000003; // just a place holder, will implement later when doing the locker contract
         (coins, locker_address)
     }
 } 
