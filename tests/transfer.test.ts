@@ -1,10 +1,13 @@
-import { getFullnodeUrl, SuiClient } from "@mysten/sui.js/client";
+import { SuiClient } from '@mysten/sui.js/client';
+import { getFullnodeUrl } from '@mysten/sui.js/client';
+import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { beforeAll, describe, expect, test } from "vitest";
 import { CCTransferFactory } from "./test_factory/cc_transfer_factory";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
 import { BigNumber } from "bignumber.js";
 import { getActiveKeypair } from "../scripts/sui.utils";
-import { TransactionBlock } from "@mysten/sui.js/transactions";
+import { callMoveFunction, pure, object } from "./utils/move-helper";
+import { hexToBytes,printEvents } from './utils';
 const CC_REQUESTS = require('./test_fixtures/ccTransferRequests.json');
 
 // call CCTransferFactory
@@ -12,13 +15,17 @@ describe('CCTransfer Tests', () => {
     // Declare variables to store the factory results
     let ccTransferRouterPackageId: string;
     let ccTransferRouterAdminId: string;
+    let ccTransferRouterId: string;
+    
     let telebtcCapId: string;
     let telebtcTreasuryCapId: string;
     let telebtcPackageId: string;
     let telebtcAdminId: string;
+
     let btcrelayPackageId: string;
     let btcrelayCapId: string;
     let btcrelayAdminId: string;
+    
     let lockerCapabilityId: string;
     let deployer: Ed25519Keypair;
     let deployerAddress: string;
@@ -29,7 +36,7 @@ describe('CCTransfer Tests', () => {
     let ONE_ADDRESS = "0x0000000000000000000000000000000000000001";
     let TWO_ADDRESS = "0x0000000000000000000000000000000000000002";
     const CHAIN_ID = 1;
-    const APP_ID = 0;
+    const APP_ID = 1;
     const PROTOCOL_PERCENTAGE_FEE = 10; // Means %0.1
     const LOCKER_PERCENTAGE_FEE = 20; // Means %0.2
     const PRICE_WITH_DISCOUNT_RATIO = 9500; // Means %95
@@ -37,6 +44,7 @@ describe('CCTransfer Tests', () => {
     const STARTING_BLOCK_NUMBER = 1;
     const TREASURY =       "0x0000000000000000000000000000000000000000000000000000000000000002"; // Valid Sui address
     const LOCKER_ADDRESS = "0x0000000000000000000000000000000000000000000000000000000000000003"; // example locker address
+    const RECEIVER_ADDRESS = "0x0000000000000000000000000000000000000000000000000000000000000004"; // example receiver address
     let LOCKER1_LOCKING_SCRIPT = '0xa9144062c8aeed4f81c2d73ff854a2957021191e20b687';
 
     let LOCKER_RESCUE_SCRIPT_P2PKH = "0x12ab8dc588ca9d5787dde7eb29569da63c3a238c";
@@ -137,51 +145,52 @@ describe('CCTransfer Tests', () => {
         deployerAddress = deployer.getPublicKey().toSuiAddress();
         TELEPORTER_ADDRESS = deployerAddress;
 
-        
-        const tx = new TransactionBlock();
-        tx.setGasBudget(500000000);
-        tx.moveCall({
-            target: `${ccTransferRouterPackageId}::cc_transfer_router_test::initialize`,
+        // Initialize CC Transfer Router using helper function
+        const initResult = await callMoveFunction({
+            packageId: ccTransferRouterPackageId,
+            moduleName: 'cc_transfer_router_test',
+            functionName: 'initialize',
             arguments: [
-                tx.pure(STARTING_BLOCK_NUMBER),
-                tx.pure(APP_ID),
-                tx.pure(PROTOCOL_PERCENTAGE_FEE),
-                tx.pure(TELEPORTER_ADDRESS),
-                tx.pure(TREASURY),
-                tx.pure(LOCKER_PERCENTAGE_FEE),
-                tx.object(ccTransferRouterAdminId),
+                pure(STARTING_BLOCK_NUMBER),
+                pure(APP_ID),
+                pure(PROTOCOL_PERCENTAGE_FEE),
+                pure(TELEPORTER_ADDRESS),
+                pure(TREASURY),
+                pure(LOCKER_PERCENTAGE_FEE),
+                object(ccTransferRouterAdminId),
             ],
-            typeArguments: [],
+            signer: deployer
         });
-        const result = await client.signAndExecuteTransactionBlock({
-            transactionBlock: tx,
-            signer: deployer,
-            options: { showEffects: true, showEvents: true }
-        });
-        expect(result.effects?.status?.status).toBe("success");
+        expect(initResult.effects?.status?.status).toBe("success");
         console.log("CC Transfer Router Initialized");
-        console.log(result);
 
-        // next step add the locker contract to the miners on telebtc contract
-        const tx2 = new TransactionBlock();
-        tx2.setGasBudget(500000000);
-        tx2.moveCall({
-            target: `${telebtcPackageId}::telebtc::add_miner`,
+        // Extract the shared router object ID from the initialization result
+        for (const obj of initResult.effects?.created || []) {
+            const objectId = obj.reference.objectId;
+            const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
+            const type = objInfo.data?.type || '';
+            
+            if (type.includes('CCTransferRouterCap')) {
+                ccTransferRouterId = objectId;
+                console.log("CC Transfer Router ID:", ccTransferRouterId);
+                break;
+            }
+        }
+
+        // Add the locker contract to the miners on telebtc contract using helper function
+        const addMinterResult = await callMoveFunction({
+            packageId: telebtcPackageId,
+            moduleName: 'telebtc',
+            functionName: 'add_minter',
             arguments: [
-                tx2.object(telebtcCapId),
-                tx2.object(telebtcAdminId),
-                tx2.pure(ccTransferRouterPackageId),
+                object(telebtcCapId),
+                object(telebtcAdminId),
+                pure(ccTransferRouterPackageId),
             ],
-            typeArguments: [],
+            signer: deployer
         });
-        const result2 = await client.signAndExecuteTransactionBlock({
-            transactionBlock: tx2,
-            signer: deployer,
-            options: { showEffects: true, showEvents: true }
-        });
-        expect(result2.effects?.status?.status).toBe("success");
+        expect(addMinterResult.effects?.status?.status).toBe("success");
         console.log("Locker contract added to miners");
-        console.log(result2);
     }, 300000); // Set timeout to 5 minutes (300000 ms)
 
     // Add a proper test case
@@ -224,21 +233,22 @@ describe('CCTransfer Tests', () => {
         tx.moveCall({
             target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
             arguments: [
+                tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                 // Create TxAndProof object
                 tx.moveCall({
                     target: `${ccTransferRouterPackageId}::cc_transfer_router_storage::create_tx_and_proof`,
                     arguments: [
-                        tx.pure(CC_REQUESTS.normalCCTransfer.version),
-                        tx.pure(CC_REQUESTS.normalCCTransfer.vin),
-                        tx.pure(CC_REQUESTS.normalCCTransfer.vout),
-                        tx.pure(CC_REQUESTS.normalCCTransfer.locktime),
+                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.version)),
+                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.vin)),
+                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.vout)),
+                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.locktime)),
                         tx.pure(CC_REQUESTS.normalCCTransfer.blockNumber),
-                        tx.pure(CC_REQUESTS.normalCCTransfer.intermediateNodes),
+                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.intermediateNodes)),
                         tx.pure(CC_REQUESTS.normalCCTransfer.index),
                     ],
                     typeArguments: [],
                 }),
-                tx.pure(LOCKER1_LOCKING_SCRIPT),
+                tx.pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 tx.object(lockerCapabilityId), // locker_cap - using the actual LockerCapability object
                 tx.object(btcrelayCapId), // relay
                 tx.object(telebtcCapId), // telebtc_cap
@@ -246,14 +256,15 @@ describe('CCTransfer Tests', () => {
             ],
             typeArguments: [],
         });
-
+        await new Promise(resolve => setTimeout(resolve, 1000));
         // Execute the transaction
         const result = await client.signAndExecuteTransactionBlock({
             transactionBlock: tx,
             signer: deployer,
             options: { showEffects: true, showEvents: true }
         });
-
+        console.log("result", result);
+        printEvents(result);
         expect(result.effects?.status?.status).toBe("success");
         console.log("CC Transfer executed successfully");
 

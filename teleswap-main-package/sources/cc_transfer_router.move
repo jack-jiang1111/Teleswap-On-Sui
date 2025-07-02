@@ -198,8 +198,8 @@ module teleswap::cc_transfer_router {
             &locker_locking_script
         );
 
-        // Verify data length is correct (38 bytes)
-        assert!(vector::length(&arbitrary_data) == 38, EINVALID_DATA_LENGTH);
+        // Verify data length is correct (39 bytes)
+        assert!(vector::length(&arbitrary_data) == 39, EINVALID_DATA_LENGTH);
 
         // Verify input amount is not zero
         assert!(input_amount > 0, EZERO_INPUT_AMOUNT);

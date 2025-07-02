@@ -23,8 +23,19 @@ module teleswap::cc_transfer_router_test {
     const ENONZERO_LOCKTIME: u64 = 22;
     const ETX_NOT_FINALIZED: u64 = 23;
     const EALREADY_INITIALIZED: u64 = 24;
-    // === Events ===
 
+    // === Events ===
+    public struct DebugEvent has copy, drop {
+            vec1: vector<u8>,
+            vec2: vector<u8>,
+            vec3: vector<u8>,
+            num1: u256,
+            num2: u256,
+            num3: u256,
+            addr1: address,
+            addr2: address,
+            addr3: address
+        }
     /// Emitted when a new wrap request is completed
     /// Contains details about the wrapped transaction including amounts and fees
     public struct NewWrap has copy, drop {
@@ -197,9 +208,9 @@ module teleswap::cc_transfer_router_test {
             &vout,
             &locker_locking_script
         );
-
-        // Verify data length is correct (38 bytes)
-        assert!(vector::length(&arbitrary_data) == 38, EINVALID_DATA_LENGTH);
+        
+        // Verify data length is correct (39 bytes)
+        assert!(vector::length(&arbitrary_data) == 39, EINVALID_DATA_LENGTH);
 
         // Verify input amount is not zero
         assert!(input_amount > 0, EZERO_INPUT_AMOUNT);
@@ -227,6 +238,7 @@ module teleswap::cc_transfer_router_test {
             network_fee,
             third_party_id,
         );
+        
     }
 
     /// Check if the request has been executed before
@@ -297,7 +309,7 @@ module teleswap::cc_transfer_router_test {
             cc_transfer_router_storage::get_vout(&tx_and_proof),
             tx_id
         );
-
+        
         // Verify transaction is confirmed
         assert!(
             is_confirmed(
@@ -327,5 +339,6 @@ module teleswap::cc_transfer_router_test {
             fees: vector[network_fee, locker_fee, protocol_fee, third_party_fee],
             third_party_id: cc_transfer_router_storage::get_third_party_id(router, tx_id)
         });
+        
     }
 } 
