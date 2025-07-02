@@ -120,3 +120,14 @@ Deployer order:
 2. initialize btcrelay
 3. give locker contract mine ability
 4. initialize transfer_router 
+
+
+Locker contract gives locker role. The locker contract creates lockerCap objects (shared).
+LockerCap object containes collator amount/ mint cap/ burn cap/ active status/ locker address etc. 
+Locker contract can change active/collateral status of the locker cap object
+All the collaternal stays in a vault object in locker contract
+Only locker can call add/withdraw funds in vault 
+
+Telebtc contract, remove mint/burner role system, instead mint/burn only open to friend package (cc_transfer/burner router/locker)
+Teleporter choose the right locker and take the corresponding lockerCap object (all shared, reachable to everyone)
+ccTransfer contract takes lockerCap object, pass in locker mint, locker mint check status, if good, call mint
