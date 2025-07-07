@@ -4,13 +4,13 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { getActiveKeypair } from '../../scripts/sui.utils';
 import * as fs from 'fs';
 import * as path from 'path';
-import { verifyUpgradeCap } from '../utils';
+import { verifyUpgradeCap } from '../utils/utils';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { BtcRelayFactory } from './btcrelay_factory';
 import { TeleBTCFactory } from './telebtc_factory';
 
 // Function to update Move.toml with actual package IDs
-function updateMoveToml(btcrelayPackageId: string, telebtcPackageId: string) {
+function updateMoveToml(btcrelayPackageId: string) {
     // Update teleswap-main-package/Move.toml
     const TeleswapMainPackageMoveTomlPath = path.join(__dirname, '../../teleswap-main-package/Move.toml');
     let moveTomlContent = fs.readFileSync(TeleswapMainPackageMoveTomlPath, 'utf8');
@@ -19,10 +19,6 @@ function updateMoveToml(btcrelayPackageId: string, telebtcPackageId: string) {
     moveTomlContent = moveTomlContent.replace(
         /btcrelay = "[^"]*"/,
         `btcrelay = "${btcrelayPackageId}"`
-    );
-    moveTomlContent = moveTomlContent.replace(
-        /telebtc = "[^"]*"/,
-        `telebtc = "${telebtcPackageId}"`
     );
     
     fs.writeFileSync(TeleswapMainPackageMoveTomlPath, moveTomlContent);
@@ -40,19 +36,6 @@ function updateMoveToml(btcrelayPackageId: string, telebtcPackageId: string) {
     
     fs.writeFileSync(btcrelayMoveTomlPath, btcrelayMoveTomlContent);
     console.log('Updated btcrelay-package/Move.toml with actual package ID');
-
-    // Update telebtc-package/Move.toml
-    const telebtcMoveTomlPath = path.join(__dirname, '../../telebtc-package/Move.toml');
-    let telebtcMoveTomlContent = fs.readFileSync(telebtcMoveTomlPath, 'utf8');
-    
-    // Update the telebtc address from 0x0 to the deployed package ID
-    telebtcMoveTomlContent = telebtcMoveTomlContent.replace(
-        /telebtc = "[^"]*"/,
-        `telebtc = "${telebtcPackageId}"`
-    );
-    
-    fs.writeFileSync(telebtcMoveTomlPath, telebtcMoveTomlContent);
-    console.log('Updated telebtc-package/Move.toml with actual package ID');
 }
 
 export async function CCTransferFactory() {
@@ -67,14 +50,10 @@ export async function CCTransferFactory() {
     const finalizationParameter = 3;
     
     const btcrelayResult = await BtcRelayFactory(genesisHeader, height, periodStart, finalizationParameter,true);// set mock to true
-    
-    // 2. Deploy TeleBTC
-    console.log('Deploying TeleBTC...');
-    const telebtcResult = await TeleBTCFactory();
 
     // 3. Update Move.toml with actual package IDs
     console.log('Updating Move.toml with actual package IDs...');
-    updateMoveToml(btcrelayResult.packageId, telebtcResult.packageId);
+    updateMoveToml(btcrelayResult.packageId);
 
     // 4. Rebuild the package with updated dependencies
     console.log('Rebuilding package with updated dependencies...');
@@ -93,10 +72,9 @@ export async function CCTransferFactory() {
 
     // 5. Deploy CC Transfer Router
     console.log('Deploying CC Transfer Router...');
-    let telebtcCapId = telebtcResult.capId;
-    let telebtcTreasuryCapId = telebtcResult.treasuryCapId;
-    let telebtcPackageId = telebtcResult.packageId;
-    let telebtcAdminId = telebtcResult.adminId;
+    let telebtcCapId = "";
+    let telebtcTreasuryCapId = "";
+    let telebtcAdminId = "";
 
     let ccTransferRouterPackageId = "";
     let ccTransferRouterAdminId = "";
@@ -123,6 +101,9 @@ export async function CCTransferFactory() {
     const bitcoinHelperModule = fs.readFileSync(
         path.join(__dirname, '../../btcrelay-package/build/btcrelay/bytecode_modules/bitcoin_helper.mv')
     );
+    const telebtcModule = fs.readFileSync(
+        path.join(__dirname, '../../teleswap-main-package/build/teleswap/bytecode_modules/telebtc.mv')
+    );
 
     let tx = new TransactionBlock();
     tx.setGasBudget(500000000);
@@ -130,14 +111,14 @@ export async function CCTransferFactory() {
         modules: [
             Array.from(requestParserModule),
             Array.from(bitcoinHelperModule),
+            Array.from(telebtcModule),
             Array.from(ccTransferRouterStorageModule),
             Array.from(dummyLockerModule),
             Array.from(ccTransferRouterModule)
         ],
         dependencies: [
             '0x1', '0x2', '0x3',
-            btcrelayPackageId,
-            telebtcPackageId
+            btcrelayPackageId
         ]
     });
 
@@ -170,6 +151,15 @@ export async function CCTransferFactory() {
         else if (type.includes('LockerCapability')) {
             lockerCapabilityId = objectId;
         }
+        else if (type.includes('TreasuryCap')) {
+            telebtcTreasuryCapId = objectId;
+        } 
+        else if (type.includes('TeleBTCCap')) {
+            telebtcCapId = objectId;
+        }
+        else if (type.includes('TELEBTC_ADMIN')) {
+            telebtcAdminId = objectId;
+        }
     }
 
     console.log('\nSelected objects:');
@@ -177,7 +167,6 @@ export async function CCTransferFactory() {
     console.log('CC Transfer Router Admin ID:', ccTransferRouterAdminId);
     console.log('TeleBTC Cap ID:', telebtcCapId);
     console.log('TeleBTC Treasury Cap ID:', telebtcTreasuryCapId);
-    console.log('TeleBTC Package ID:', telebtcPackageId);
     console.log('TeleBTC Admin ID:', telebtcAdminId);
     console.log('BTC Relay Package ID:', btcrelayPackageId);
     console.log('BTC Relay Cap ID:', btcrelayCapId);
@@ -193,7 +182,6 @@ export async function CCTransferFactory() {
         // TeleBTC
         telebtcCapId,
         telebtcTreasuryCapId,
-        telebtcPackageId,
         telebtcAdminId,
         
         // BTC Relay

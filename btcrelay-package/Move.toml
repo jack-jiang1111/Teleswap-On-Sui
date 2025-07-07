@@ -7,5 +7,5 @@ edition = "2024"
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 
 [addresses]
-btcrelay = "0x485b1fc6d490f89fcd30920879145fd0c233960ec2aa5bb5cb32ef9dc27b7700"
+btcrelay = "0xdcb254d48fc09007802c27b8720456f0ab52f6696ce87fe44089627a37249ce5"
 sui = "0x2" 

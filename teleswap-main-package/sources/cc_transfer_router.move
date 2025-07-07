@@ -1,7 +1,7 @@
 #[allow( lint(self_transfer),lint(share_owned))]
 module teleswap::cc_transfer_router {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
-    use telebtc::telebtc::{TeleBTCCap, TELEBTC};
+    use teleswap::telebtc::{TeleBTCCap, TELEBTC};
     use btcrelay::btcrelay::{Self, BTCRelay};
     use teleswap::dummy_locker::{Self, LockerCapability};
     use btcrelay::bitcoin_helper;
@@ -198,8 +198,8 @@ module teleswap::cc_transfer_router {
             &locker_locking_script
         );
 
-        // Verify data length is correct (38 bytes)
-        assert!(vector::length(&arbitrary_data) == 38, EINVALID_DATA_LENGTH);
+        // Verify data length is correct (39 bytes)
+        assert!(vector::length(&arbitrary_data) == 39, EINVALID_DATA_LENGTH);
 
         // Verify input amount is not zero
         assert!(input_amount > 0, EZERO_INPUT_AMOUNT);

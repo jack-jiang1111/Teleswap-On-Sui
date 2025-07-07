@@ -2,7 +2,7 @@
 module teleswap::dummy_locker {
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::balance::{Self, Balance};
-    use telebtc::telebtc::{Self, TeleBTCCap, TELEBTC};
+    use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
 
     /// Error codes
     const ENOT_LOCKER: u64 = 1;
@@ -15,14 +15,14 @@ module teleswap::dummy_locker {
     }
 
     /// Capability for managing the locker
-    public struct LockerCapability has key {
+    public struct LockerCapability has key,store {
         id: UID
     }
 
     /// Initialize the dummy locker module
     /// Creates and transfers the LockerCapability to the deployer
     /// @param ctx The transaction context
-    public fun init(ctx: &mut TxContext) {
+    fun init(ctx: &mut TxContext) {
         let locker_cap = LockerCapability {
             id: object::new(ctx)
         };

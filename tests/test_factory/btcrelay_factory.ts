@@ -5,7 +5,7 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { getActiveKeypair } from '../../scripts/sui.utils';
 import * as fs from 'fs';
 import * as path from 'path';
-import {  printEvents, verifyUpgradeCap } from '../utils';
+import {  printEvents, verifyUpgradeCap } from '../utils/utils';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 // Function to update Move.toml with actual package IDs
 function ResetBtcrelayMoveToml() {

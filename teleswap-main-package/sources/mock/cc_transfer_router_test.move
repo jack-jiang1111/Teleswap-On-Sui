@@ -1,7 +1,7 @@
-#[allow( lint(self_transfer),lint(share_owned))]
+#[allow( lint(self_transfer),lint(share_owned),unused_field)]
 module teleswap::cc_transfer_router_test {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
-    use telebtc::telebtc::{TeleBTCCap, TELEBTC};
+    use teleswap::telebtc::{TeleBTCCap, TELEBTC};
     use btcrelay::btcrelay_mock::{Self, BTCRelay};
     use teleswap::dummy_locker::{Self, LockerCapability};
     use btcrelay::bitcoin_helper;
@@ -23,8 +23,19 @@ module teleswap::cc_transfer_router_test {
     const ENONZERO_LOCKTIME: u64 = 22;
     const ETX_NOT_FINALIZED: u64 = 23;
     const EALREADY_INITIALIZED: u64 = 24;
-    // === Events ===
 
+    // === Events ===
+    public struct DebugEvent has copy, drop {
+            vec1: vector<u8>,
+            vec2: vector<u8>,
+            vec3: vector<u8>,
+            num1: u256,
+            num2: u256,
+            num3: u256,
+            addr1: address,
+            addr2: address,
+            addr3: address
+        }
     /// Emitted when a new wrap request is completed
     /// Contains details about the wrapped transaction including amounts and fees
     public struct NewWrap has copy, drop {
@@ -140,7 +151,7 @@ module teleswap::cc_transfer_router_test {
         let network_fee = cc_transfer_router_storage::get_network_fee(router, tx_id);
         let third_party_id = cc_transfer_router_storage::get_third_party_id(router, tx_id);
         let third_party_fee = (amount * cc_transfer_router_storage::get_third_party_fee(router, third_party_id)) / 10000;
-        let locker_fee = protocol_fee*2; // just a place holder, will implement later when doing the locker contract
+        let locker_fee = (amount * cc_transfer_router_storage::get_locker_percentage_fee(router)) / 10000;
         let remained_amount = amount - protocol_fee - network_fee - third_party_fee;
         let recipient_address = cc_transfer_router_storage::get_recipient(router, tx_id);
 
@@ -149,6 +160,7 @@ module teleswap::cc_transfer_router_test {
 
         // Distribute fees to respective parties
         if (network_fee > 0) {
+            // network fee is paid to teleporter, which is a constant value defined in the op_return value of the request
             let teleport_reward = coin::split(&mut coins, network_fee, ctx);
             transfer::public_transfer(teleport_reward, tx_context::sender(ctx));
         };
@@ -197,9 +209,9 @@ module teleswap::cc_transfer_router_test {
             &vout,
             &locker_locking_script
         );
-
-        // Verify data length is correct (38 bytes)
-        assert!(vector::length(&arbitrary_data) == 38, EINVALID_DATA_LENGTH);
+        
+        // Verify data length is correct (39 bytes)
+        assert!(vector::length(&arbitrary_data) == 39, EINVALID_DATA_LENGTH);
 
         // Verify input amount is not zero
         assert!(input_amount > 0, EZERO_INPUT_AMOUNT);
@@ -297,7 +309,7 @@ module teleswap::cc_transfer_router_test {
             cc_transfer_router_storage::get_vout(&tx_and_proof),
             tx_id
         );
-
+        
         // Verify transaction is confirmed
         assert!(
             is_confirmed(
@@ -327,5 +339,6 @@ module teleswap::cc_transfer_router_test {
             fees: vector[network_fee, locker_fee, protocol_fee, third_party_fee],
             third_party_id: cc_transfer_router_storage::get_third_party_id(router, tx_id)
         });
+        
     }
 } 

@@ -1,10 +1,11 @@
-#[allow(unused)]
+#[allow(lint(self_transfer),lint(share_owned),unused)]
 module btcrelay::bitcoin_helper {
     // === Imports ===
     use sui::table::{Self, Table};
     use sui::event;
     use std::debug;
     use sui::event::emit;
+    use std::address;
 
     // Constants
     const RETARGET_PERIOD_BLOCKS: u64 = 2016;
@@ -555,7 +556,6 @@ module btcrelay::bitcoin_helper {
             let script_pubkey = script_pubkey(&output);
             let script_pubkey_with_length = script_pubkey_with_length(&output);
             let op_return_data = op_return_payload_small(&script_pubkey_with_length);
-
             // Check if this is an op_return output
             if (vector::is_empty(&op_return_data)) {
                 // Not an op_return, check if it matches our locking script

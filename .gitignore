@@ -1,7 +1,7 @@
 # Sui specific
 build/
 .sui/
-sui.note
+
 
 # Dependencies
 node_modules/
@@ -35,4 +35,4 @@ Thumbs.db
 package-id.json
 
 # Sol files
-*.sol
+
