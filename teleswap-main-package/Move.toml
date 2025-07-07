@@ -6,10 +6,8 @@ edition = "2024"
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 btcrelay = { local = "../btcrelay-package" }
-telebtc = { local = "../telebtc-package" }
 
 [addresses]
 teleswap = "0x0"
-btcrelay = "0xda9c599ce54b2baa860ce74ffb519e5f2f73187cecf941ac0436ac117a14fa5e"
-telebtc = "0x0441f2a934e721c8701a7aa3df87c5be26351067f5f81e2f88c5f1c52f5e5357"
+btcrelay = "0xdcb254d48fc09007802c27b8720456f0ab52f6696ce87fe44089627a37249ce5"
 sui = "0x2" 

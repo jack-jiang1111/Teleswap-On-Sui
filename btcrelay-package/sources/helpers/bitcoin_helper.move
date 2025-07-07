@@ -1,4 +1,4 @@
-#[allow(lint(self_transfer),lint(share_owned))]
+#[allow(lint(self_transfer),lint(share_owned),unused)]
 module btcrelay::bitcoin_helper {
     // === Imports ===
     use sui::table::{Self, Table};

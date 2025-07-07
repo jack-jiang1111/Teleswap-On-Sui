@@ -1,5 +1,5 @@
 #[allow(unused)]
-module telebtc::telebtc {
+module teleswap::telebtc {
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::table::{Self, Table};
     use sui::package::{Self, UpgradeCap};
@@ -9,8 +9,6 @@ module telebtc::telebtc {
     // Error codes
     const ENOT_OWNER: u64 = 2;
     const ENOT_BLACKLISTER: u64 = 3;
-    const ENOT_MINTER: u64 = 4;
-    const ENOT_BURNER: u64 = 5;
     const EALREADY_HAS_ROLE: u64 = 6;
     const EDOES_NOT_HAVE_ROLE: u64 = 7;
     const EZERO_VALUE: u64 = 8;
@@ -34,8 +32,6 @@ module telebtc::telebtc {
 
     public struct TeleBTCCap has key,store {
         id: UID,
-        minters: Table<address, bool>,
-        burners: Table<address, bool>,
         blacklisters: Table<address, bool>,
         blacklisted: Table<address, bool>,
         max_mint_limit: u64,
@@ -46,14 +42,11 @@ module telebtc::telebtc {
     }
 
     public struct MintEvent has copy, drop {
-        minter: address,
         receiver: address,
         amount: u64
     }
 
     public struct BurnEvent has copy, drop {
-        burner: address,
-        account: address,
         amount: u64
     }
 
@@ -80,8 +73,6 @@ module telebtc::telebtc {
 
         let cap = TeleBTCCap {
             id: object::new(ctx),
-            minters: table::new(ctx),
-            burners: table::new(ctx),
             blacklisters: table::new(ctx),
             blacklisted: table::new(ctx),
             max_mint_limit: INITIAL_MINT_LIMIT,
@@ -112,59 +103,6 @@ module telebtc::telebtc {
     }
 
     // Role management functions
-    public fun add_minter(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, new_minter: address, ctx: &mut TxContext) {
-        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
-        if(table::contains(&cap.minters, new_minter)) {
-            if(*table::borrow(&cap.minters, new_minter)) {
-                // already a minter
-                abort EALREADY_HAS_ROLE
-            } else {
-                // set the table to true
-                *table::borrow_mut(&mut cap.minters, new_minter) = true;
-            }
-        } else {
-            table::add(&mut cap.minters, new_minter, true);
-        };
-        event::emit(RoleEvent { account: new_minter, role_type: 1, is_added: true });
-    }
-
-    public fun remove_minter(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, minter: address) {
-        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
-        if(table::contains(&cap.minters, minter)&&*table::borrow(&cap.minters, minter)) {
-            *table::borrow_mut(&mut cap.minters, minter) = false;
-        }
-        else{
-            abort EDOES_NOT_HAVE_ROLE;
-        };
-        event::emit(RoleEvent { account: minter, role_type: 1, is_added: false });
-    }
-
-    public fun add_burner(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, new_burner: address, ctx: &mut TxContext) {
-        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
-        if(table::contains(&cap.burners, new_burner)) {
-            if(*table::borrow(&cap.burners, new_burner)) {
-                // already a burner
-                abort EALREADY_HAS_ROLE
-            } else {
-                // set the table to true
-                *table::borrow_mut(&mut cap.burners, new_burner) = true;
-            }
-        } else {
-            table::add(&mut cap.burners, new_burner, true);
-        };
-        event::emit(RoleEvent { account: new_burner, role_type: 2, is_added: true });
-    }
-
-    public fun remove_burner(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, burner: address) {
-        assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
-        if(table::contains(&cap.burners, burner) && *table::borrow(&cap.burners, burner)) {
-            *table::borrow_mut(&mut cap.burners, burner) = false;
-        } else {
-            abort EDOES_NOT_HAVE_ROLE
-        };
-        event::emit(RoleEvent { account: burner, role_type: 2, is_added: false });
-    }
-
     public fun add_blacklister(cap: &mut TeleBTCCap, admin: &TELEBTC_ADMIN, new_blacklister: address, ctx: &mut TxContext) {
         assert!(admin.owner == cap.adminAddress, EINVALID_ADMIN);
         if(table::contains(&cap.blacklisters, new_blacklister)) {
@@ -219,37 +157,33 @@ module telebtc::telebtc {
     }
 
     // Minting and burning
-    public fun mint(
+    public(package) fun mint(
         cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         receiver: address,
         amount: u64,
         ctx: &mut TxContext
     ): Coin<TELEBTC> {
-        let sender = tx_context::sender(ctx);
-        assert!(table::contains(&cap.minters, sender) && *table::borrow(&cap.minters, sender), ENOT_MINTER);
         assert!(amount > 0, EZERO_VALUE);
         assert!(amount <= cap.max_mint_limit, EMINT_LIMIT_EXCEEDED);
         assert!(check_and_reduce_mint_limit(cap, amount, ctx), EEPOCH_MINT_LIMIT_REACHED);
         
         let coins = coin::mint(treasury_cap, amount, ctx);
-        event::emit(MintEvent { minter: sender, receiver, amount });
+        event::emit(MintEvent {receiver, amount });
         coins
     }
 
-    public fun burn(
+    public(package) fun burn(
         cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         coins: Coin<TELEBTC>,
         ctx: &mut TxContext
     ):bool {
-        let sender = tx_context::sender(ctx);
-        assert!(table::contains(&cap.burners, sender) && *table::borrow(&cap.burners, sender), ENOT_BURNER);
         let amount = coin::value(&coins);
         assert!(amount > 0, EZERO_VALUE);
         
         let burned_amount = coin::burn(treasury_cap, coins);
-        event::emit(BurnEvent { burner: sender, account: sender, amount: burned_amount });
+        event::emit(BurnEvent { amount: burned_amount });
         true
     }
 
@@ -312,24 +246,6 @@ module telebtc::telebtc {
         assert!(new_length > 0, EZERO_VALUE);
         cap.epoch_length = new_length;
         // emit events NewEpochLength(epochLength, _length);
-    }
-
-    // helper function to check if an address is a minter
-    public fun is_minter(cap: &TeleBTCCap, address: address): bool {
-        if (table::contains(&cap.minters, address)) {
-            *table::borrow(&cap.minters, address)
-        } else {
-            false
-        }
-    }
-
-    // helper function to check if an address is a burner
-    public fun is_burner(cap: &TeleBTCCap, address: address): bool {
-        if (table::contains(&cap.burners, address)) {
-            *table::borrow(&cap.burners, address)
-        } else {
-            false
-        }
     }
 
     // helper function to check if an address is a blacklister

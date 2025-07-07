@@ -6,7 +6,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { getNetwork } from '../config';
 import { getActiveKeypair } from '../sui.utils';
-import { verifyUpgradeCap } from '../../tests/utils';
+import { verifyUpgradeCap } from '../../tests/utils/utils';
 // run the file to deploy the package
 // ts-node ./01-deploy_btc_relay.ts [network]
 // e.g. ts-node ./01-deploy_btc_relay.ts mainnet

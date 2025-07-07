@@ -100,10 +100,9 @@ MIT
 ## Some note about general design (diff from evm contract)
 1. Contracts will be upgraded using the upgrade Cap. The upgrade Cap will be assigned to deployer when deploying the contract
 2. Package id won't change when upgrading the contract (In Move, the address must be known at compile time for use statements. You cannot dynamically import a module at runtime.)
-3. The bridge/locker/burner/exchange contracts will depend on each other by "use module"
+3. The bridge/locker/burner/exchange/telebtc contracts will depend on each other by "use module"
 4. Development order: 
 
-  (2) bridge contract testing
   (3) burner rounter contract, also add dummy locker manager contract for testing
   (4) burner testing
   (5) locker contract
@@ -113,13 +112,10 @@ MIT
   (9) exchange contract testing
 
 -- Need to update deploy script due to directory messed up
-locker fee needs adjust
+-- locker fee needs adjust
+-- Telebtc test rewrite due to telebtc restructure
 
-Deployer order:
-1. btcrelay_mock,telebtc,bitcoin_helper,dummy_locker,request_parser,cc_transfer_router_storage,cc_transfer_router
-2. initialize btcrelay
-3. give locker contract mine ability
-4. initialize transfer_router 
+
 
 
 Locker contract gives locker role. The locker contract creates lockerCap objects (shared).

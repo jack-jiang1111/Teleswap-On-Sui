@@ -2,12 +2,11 @@
 
 [move]
 version = 3
-manifest_digest = "3E7F968602856E70A0102CCD1ED5D75034EAA05CEE872CD12B57FB377452C2C3"
-deps_digest = "060AD7E57DFB13104F21BE5F5C3759D03F0553FC3229247D9A7A6B45F50D03A3"
+manifest_digest = "812BCF46C29CF83CDE9BE014CC31DF6FAB0FD5AEF9D3C17B3A6B9BDD37E3803E"
+deps_digest = "3C4103934B1E040BB6B23F1D610B4EF9F2F1166A50A104EADCF77467C004C600"
 dependencies = [
   { id = "Sui", name = "Sui" },
   { id = "btcrelay", name = "btcrelay" },
-  { id = "telebtc", name = "telebtc" },
 ]
 
 [[move.package]]
@@ -30,15 +29,7 @@ dependencies = [
   { id = "Sui", name = "Sui" },
 ]
 
-[[move.package]]
-id = "telebtc"
-source = { local = "..\\telebtc-package" }
-
-dependencies = [
-  { id = "Sui", name = "Sui" },
-]
-
 [move.toolchain-version]
-compiler-version = "1.48.0"
+compiler-version = "1.51.2"
 edition = "2024"
 flavor = "sui"

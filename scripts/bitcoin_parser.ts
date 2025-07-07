@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { hexToBytes } from '../tests/utils';
+import { hexToBytes } from '../tests/utils/utils';
 
 // Helper function to convert hex string to Uint8Array
 function fromHex(hex: string): Uint8Array {
@@ -270,9 +270,8 @@ function createRequest(
  * @param name - Name for the transaction (e.g., "normalCCTransfer")
  * @param appId - Application ID (1 byte)
  * @param recipientAddress - Recipient Sui address (32 bytes)
- * @param networkFee - Network fee (4 bytes)
+ * @param networkFee or teleporterFee - Network fee (4 bytes)
  * @param speed - Speed setting (1 byte)
- * @param teleporterFee - Teleporter fee
  * @param thirdParty - Third party ID (1 byte)
  * @returns JSON string representing the complete Bitcoin transaction
  */
@@ -280,18 +279,18 @@ function createBitcoinTransactionJson(
     name: string,
     appId: number,
     recipientAddress: string,
-    networkFee: number,
-    speed: number,
     teleporterFee: number,
-    thirdParty: number
-): string {
+    speed: number,
+    thirdParty: number,
+    noValue = false
+): any {
     // Create the 39-byte transfer request hex
-    const transferRequestHex = createRequest(appId, recipientAddress, networkFee, speed, thirdParty);
+    const transferRequestHex = createRequest(appId, recipientAddress, teleporterFee, speed, thirdParty);
     
     // Create Bitcoin transaction components according to protocol
     const version = "0x02000000";
     const vin = "0x" + createBitcoinVin();
-    const bitcoinAmount = 0.0001;
+    const bitcoinAmount = noValue ? 0 : 0.0001;
     const vout = "0x" + createBitcoinVout(bitcoinAmount, transferRequestHex);
     const opReturn = transferRequestHex;
     const locktime = "0x00000000";
@@ -323,12 +322,8 @@ function createBitcoinTransactionJson(
         desiredRecipient
     };
     
-    // Create the final JSON structure
-    const result = {
-        [name]: transaction
-    };
-    
-    return JSON.stringify(result, null, 2);
+    // Return the transaction object directly
+    return transaction;
 }
 
 /**
