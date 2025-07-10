@@ -1,5 +1,5 @@
 #[allow( lint(self_transfer),lint(share_owned))]
-module teleswap::cc_transfer_router {
+module teleswap::cc_transfer_router_logic {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
     use teleswap::telebtc::{TeleBTCCap, TELEBTC};
     use btcrelay::btcrelay::{Self, BTCRelay};

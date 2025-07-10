@@ -102,7 +102,7 @@ def print_transaction_details(tx_details: Dict[str, Any]) -> None:
 
 def main():
     
-    txid = "f307ad5c318c2ce0bfe2df20814e25b3a16ab073cc6fae13f57a1ced9cd9f19a"
+    txid = "2b2d37bcb21cc9a953fdae536f8286b6cdd34632c241e3257699d9555dabb045"
     
     # Get transaction details
     tx_details = get_transaction_details(txid)
