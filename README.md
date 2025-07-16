@@ -103,7 +103,6 @@ MIT
 3. The bridge/locker/burner/exchange/telebtc contracts will depend on each other by "use module"
 4. Development order: 
 
-  (3) burner rounter contract, also add dummy locker manager contract for testing
   (4) burner testing
   (5) locker contract
   (6) locker contract testing
@@ -112,18 +111,7 @@ MIT
   (9) exchange contract testing
 
 -- Need to update deploy script due to directory messed up
--- locker fee needs adjust
+-- locker fee needs adjust in cc transfer contract
 -- Telebtc test rewrite due to telebtc restructure
+-- btcrelay contract verify
 
-
-
-
-Locker contract gives locker role. The locker contract creates lockerCap objects (shared).
-LockerCap object containes collator amount/ mint cap/ burn cap/ active status/ locker address etc. 
-Locker contract can change active/collateral status of the locker cap object
-All the collaternal stays in a vault object in locker contract
-Only locker can call add/withdraw funds in vault 
-
-Telebtc contract, remove mint/burner role system, instead mint/burn only open to friend package (cc_transfer/burner router/locker)
-Teleporter choose the right locker and take the corresponding lockerCap object (all shared, reachable to everyone)
-ccTransfer contract takes lockerCap object, pass in locker mint, locker mint check status, if good, call mint

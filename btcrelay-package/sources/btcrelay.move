@@ -216,7 +216,7 @@ module btcrelay::btcrelay {
     /// @param index Position of transaction in the block
     /// @return True if transaction is confirmed on Bitcoin
     public fun checkTxProof(
-            relay: &mut BTCRelay,
+            relay: & BTCRelay,
             txid: vector<u8>,
             block_height: u64,
             intermediate_nodes: vector<u8>,

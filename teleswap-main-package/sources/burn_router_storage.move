@@ -1,4 +1,4 @@
-#[allow(unused_field)]
+#[allow(unused_field,unused_variable)]
 module teleswap::burn_router_storage {
     use sui::table::{Self, Table};
 
@@ -9,6 +9,7 @@ module teleswap::burn_router_storage {
     // Error codes
     const EINVALID_ADMIN: u64 = 1;
     const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 2;
+    const EALREADY_INITIALIZED: u64 = 33;
     // ===== STRUCTURES =====
     public struct BurnRequest has store, copy,drop {
         amount: u64,
@@ -22,7 +23,7 @@ module teleswap::burn_router_storage {
     }
 
     // Main storage resource for BurnRouter
-    public struct BurnRouter has key {
+    public struct BurnRouter has key,store {
         id: UID,
         owner: address,
         starting_block_number: u64,
@@ -30,6 +31,8 @@ module teleswap::burn_router_storage {
         protocol_percentage_fee: u64, // Min amount is %0.01
         slasher_percentage_reward: u64, // Min amount is %1
         bitcoin_fee: u64, // Fee of submitting a tx on Bitcoin
+        treasury: address,
+        bitcoin_fee_oracle: address,
         
         // Storage mappings converted to Move tables
         burn_requests: Table<address, vector<BurnRequest>>, 
@@ -42,11 +45,7 @@ module teleswap::burn_router_storage {
         third_party_address: Table<u64, address>,
         wrapped_native_token: address,
         locker_percentage_fee: u64,
-        reward_distributor: address,
     }
-
-    // ===== CAPABILITIES =====
-
 
     /// Admin control structure for the contract
     /// Stores owner address
@@ -59,7 +58,7 @@ module teleswap::burn_router_storage {
     /// Helper function to verify admin privileges
     /// @param caller Caller's address
     /// @param burn_router The burn router capability
-    fun assert_admin(caller: address, burn_router: &BurnRouter) {
+    public(package) fun assert_admin(caller: address, burn_router: &BurnRouter) {
         assert!(caller == burn_router.owner, EINVALID_ADMIN);
     }
 
@@ -75,7 +74,19 @@ module teleswap::burn_router_storage {
     public fun get_bitcoin_fee(burn_router: &BurnRouter): u64 { burn_router.bitcoin_fee }
     public fun get_wrapped_native_token(burn_router: &BurnRouter): address { burn_router.wrapped_native_token }
     public fun get_locker_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.locker_percentage_fee }
-    public fun get_reward_distributor(burn_router: &BurnRouter): address { burn_router.reward_distributor }
+    public fun get_treasury(burn_router: &BurnRouter): address { burn_router.treasury }
+    public fun get_bitcoin_fee_oracle(burn_router: &BurnRouter): address { burn_router.bitcoin_fee_oracle }
+
+    // ===== FIELD GETTERS FOR BurnRequest =====
+    public fun get_amount(request: &BurnRequest): u64 { request.amount }
+    public fun get_burnt_amount(request: &BurnRequest): u64 { request.burnt_amount }
+    public fun get_sender(request: &BurnRequest): address { request.sender }
+    public fun get_user_script(request: &BurnRequest): vector<u8> { request.user_script }
+    public fun get_script_type(request: &BurnRequest): u8 { request.script_type }
+    public fun get_deadline(request: &BurnRequest): u64 { request.deadline }
+    public fun is_transferred(request: &BurnRequest): bool { request.is_transferred }
+    public fun get_request_id_of_locker(request: &BurnRequest): u64 { request.request_id_of_locker }
+    public fun set_is_transferred(request: &mut BurnRequest, value: bool) { request.is_transferred = value; }
 
     // ===== OWNERS SETTERS =====
     public fun set_starting_block_number(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, block_number: u64) {
@@ -126,6 +137,7 @@ module teleswap::burn_router_storage {
             *table::borrow(&burn_router.burn_request_counter, locker_target_address)
         } else {
             0
+            // need to throw error
         }
     }
 
@@ -135,6 +147,10 @@ module teleswap::burn_router_storage {
         } else {
             false
         }
+    }
+
+    public fun get_is_used_as_burn_proof_mut(burn_router: &mut BurnRouter): &mut table::Table<vector<u8>, bool> {
+        &mut burn_router.is_used_as_burn_proof
     }
 
     public fun get_third_party_fee(burn_router: &BurnRouter, third_party_id: u64): u64 {
@@ -267,5 +283,102 @@ module teleswap::burn_router_storage {
         if (table::contains(&burn_router.burn_requests, locker_target_address)) {
             table::remove(&mut burn_router.burn_requests, locker_target_address);
         }
+    }
+
+    /// @notice Records burn request of user
+    /// @return request_id The ID of the created burn request
+    public(package) fun save_burn_request(
+        burn_router: &mut BurnRouter,
+        amount: u64,
+        burnt_amount: u64,
+        user_script: vector<u8>,
+        script_type: u8,
+        last_submitted_height: u64,
+        locker_target_address: address,
+        sender: address
+    ): u64 {
+        // Get current counter for this locker target address
+        let request_id = get_burn_request_counter(burn_router, locker_target_address);
+        
+        // Create burn request with proper parameters
+        let request = create_burn_request(
+            amount,
+            burnt_amount,
+            sender,
+            user_script,
+            script_type,
+            last_submitted_height + burn_router.transfer_deadline, // deadline = last_submitted_height + transfer_deadline
+            request_id // request_id_of_locker = current counter
+        );
+        
+        // Add request to burn_requests array
+        add_burn_request(burn_router, locker_target_address, request);
+        
+        // Increment counter
+        increment_burn_request_counter(burn_router, locker_target_address);
+        
+        // Return the request_id
+        request_id
+    }
+
+    /// Returns a mutable reference to a burn request for a given locker and index
+    public(package) fun get_burn_request_mut(
+        burn_router: &mut BurnRouter,
+        locker_target_address: address,
+        index: u64
+    ): &mut BurnRequest {
+        let requests = table::borrow_mut(&mut burn_router.burn_requests, locker_target_address);
+        assert!(index < vector::length(requests), 1); // Index out of bounds
+        vector::borrow_mut(requests, index)
+    }
+
+    /// Creates a new BurnRouter object
+    public(package) fun create_burn_router(
+        owner: address,
+        starting_block_number: u64,
+        transfer_deadline: u64,
+        protocol_percentage_fee: u64,
+        locker_percentage_fee: u64,
+        slasher_percentage_reward: u64,
+        bitcoin_fee: u64,
+        treasury: address,
+        bitcoin_fee_oracle: address,
+        wrapped_native_token: address,
+        ctx: &mut TxContext
+    ): BurnRouter {
+        BurnRouter {
+            id: object::new(ctx),
+            owner,
+            starting_block_number,
+            transfer_deadline,
+            protocol_percentage_fee,
+            slasher_percentage_reward,
+            bitcoin_fee,
+            treasury,
+            bitcoin_fee_oracle,
+            burn_requests: table::new(ctx),
+            burn_request_counter: table::new(ctx),
+            is_used_as_burn_proof: table::new(ctx),
+            third_party_fee: table::new(ctx),
+            third_party_address: table::new(ctx),
+            wrapped_native_token,
+            locker_percentage_fee,
+        }
+    }
+
+    /// Creates a new BURN_ROUTER_ADMIN object
+    public(package) fun create_burn_router_admin(ctx: &mut TxContext): BURN_ROUTER_ADMIN {
+        BURN_ROUTER_ADMIN {
+            id: object::new(ctx),
+            owner: tx_context::sender(ctx),
+            initialized: false
+        }
+    }
+
+    /// Performs the initialize logic: checks and sets initialized, returns owner
+    public fun do_initialize(admin: &mut BURN_ROUTER_ADMIN): address {
+        assert!(!admin.initialized, EALREADY_INITIALIZED); // Already initialized
+        admin.initialized = true;
+        admin.owner
     }
 } 

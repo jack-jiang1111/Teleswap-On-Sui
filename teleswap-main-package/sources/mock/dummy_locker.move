@@ -56,4 +56,34 @@ module teleswap::dummy_locker {
         let locker_address = @0x0000000000000000000000000000000000000000000000000000000000000003; // just a place holder, will implement later when doing the locker contract
         (coins, locker_address)
     }
+
+    public fun burn(
+        _locker_locking_script: vector<u8>, 
+        coins: Coin<TELEBTC>, 
+        telebtc_cap: &mut TeleBTCCap, 
+        treasury_cap: &mut TreasuryCap<TELEBTC>, 
+        ctx: &mut TxContext) {
+        // Placeholder implementation - does nothing
+        // let locker_target_address = get_locker_target_address(_locker_locking_script);
+        telebtc::burn(telebtc_cap, treasury_cap, coins, ctx);
+    }
+
+    /// Placeholder for slashing idle locker
+    public fun slash_idle_locker(
+        locker_target_address: address,
+        slasher_reward: u64,
+        slasher_address: address,
+        total_amount: u64,
+        user_address: address
+    ) {
+        // TODO: Implement actual slashing logic
+    }
+    public fun slash_thief_locker(
+        locker_target_address: address,
+        slasher_reward: u64,
+        slasher_address: address,
+        total_amount: u64,
+    ) {
+        // TODO: Implement actual slashing logic
+    }
 } 

@@ -23,6 +23,7 @@ module btcrelay::bitcoin_helper {
     const ENON_MINIMAL_COMPACT_INT: u64 = 107;
     const EINVALID_VOUT_LENGTH: u64 = 108;
     const EINVALID_OP_RETURN: u64 = 109;
+    const EINVALID_SCRIPT_TYPE: u64 = 110;
 
     public struct DebugEvent has copy, drop {
         vec1: vector<u8>,
@@ -669,4 +670,141 @@ module btcrelay::bitcoin_helper {
         std::hash::sha2_256(hash1)
     }
 
+    /// @notice Parses value from a specific output having a particular script and script type
+    /// @param vout The vout data
+    /// @param vout_index The index of the output to parse
+    /// @param user_script The user script to match
+    /// @param script_type The script type
+    /// @return The parsed amount in satoshis
+    public fun parse_value_from_specific_output_having_script(
+        vout: &vector<u8>,
+        vout_index: u64,
+        user_script: &vector<u8>,
+        script_type: u8
+    ): u64 {
+        assert!(try_as_vout(vout), EINVALID_VOUT);
+        let output = index_vout(vout, vout_index);
+        let script_pubkey = script_pubkey(&output);
+        let script_len = vector::length(&script_pubkey);
+
+        let matches = if (script_type == 2) { // P2TR
+            script_len >= 34 && vector_sub(&script_pubkey, 2, 32) == *user_script
+        } else if (script_type == 0) { // P2PK
+            script_len >= 33 && vector_sub(&script_pubkey, 1, 32) == *user_script
+        } else if (script_type == 3) { // P2PKH
+            script_len >= 23 && vector_sub(&script_pubkey, 3, 20) == *user_script
+        } else if (script_type == 4) { // P2SH
+            script_len >= 23 && vector_sub(&script_pubkey, 2, 20) == *user_script
+        } else if (script_type == 5) { // P2WPKH
+            script_len >= 22 && vector_sub(&script_pubkey, 2, 20) == *user_script
+        } else if (script_type == 1) { // P2WSH
+            script_len >= 34 && vector_sub(&script_pubkey, 2, 32) == *user_script
+        } else {
+            abort EINVALID_SCRIPT_TYPE
+        };
+
+        if (matches) {
+            value(&output)
+        } else {
+            0
+        }
+    }
+
+    /// @notice Returns a subvector of the given vector
+    /// @param v The vector
+    /// @param start The start index
+    /// @param len The length of the subvector
+    /// @return The subvector
+    public fun vector_sub<T: copy>(v: &vector<T>, start: u64, len: u64): vector<T> {
+        let mut result = vector::empty<T>();
+        let mut i = 0;
+        while (i < len) {
+            vector::push_back(&mut result, *vector::borrow(v, start + i));
+            i = i + 1;
+        };
+        result
+    }
+
+    /// Parses the BTC amount sent to a specific locking script in the vout
+    public fun parse_value_having_locking_script(
+        vout: &vector<u8>,
+        locking_script: &vector<u8>
+    ): u64 {
+        assert!(try_as_vout(vout), EINVALID_VOUT);
+        let number_of_outputs = index_compact_int(vout, 0);
+        let mut bitcoin_amount = 0u64;
+        let mut index = 0u64;
+        while (index < number_of_outputs) {
+            let output = index_vout(vout, index);
+            let script_pubkey = script_pubkey(&output);
+            if (script_pubkey == *locking_script) {
+                bitcoin_amount = value(&output);
+                break;
+            };
+            index = index + 1;
+        };
+        bitcoin_amount
+    }
+
+    /// Returns the number of outputs in a vout
+    public fun number_of_outputs(vout: &vector<u8>): u64 {
+        assert!(try_as_vout(vout), EINVALID_VOUT);
+        index_compact_int(vout, 0)
+    }
+
+    /// Extracts the outpoint id and index from a vin at a given input index
+    /// @param vin The vin vector
+    /// @param input_index The index of the input to extract
+    /// @return (outpoint_id, outpoint_index)
+    public fun extract_outpoint(vin: &vector<u8>, input_index: u64): (vector<u8>, u64) {
+        // Bitcoin vin: [input_count][inputs...]
+        // Each input: [outpoint (32 bytes txid LE)][outpoint index (4 bytes LE)][script length][script][sequence (4 bytes)]
+        let input_count = index_compact_int(vin, 0);
+        let mut offset = compact_int_length(input_count);
+        let mut i = 0u64;
+        while (i < input_index) {
+            // Skip outpoint (32 bytes) + outpoint index (4 bytes)
+            offset = offset + 32 + 4;
+            // Get script length
+            let script_len = index_compact_int(vin, offset);
+            offset = offset + compact_int_length(script_len) + script_len;
+            // Skip sequence (4 bytes)
+            offset = offset + 4;
+            i = i + 1;
+        };
+        // Now at the desired input
+        let outpoint_id = vector_sub(vin, offset, 32);
+        let outpoint_index =
+            (*vector::borrow(vin, offset + 32) as u64) |
+            ((*vector::borrow(vin, offset + 33) as u64) << 8) |
+            ((*vector::borrow(vin, offset + 34) as u64) << 16) |
+            ((*vector::borrow(vin, offset + 35) as u64) << 24);
+        (outpoint_id, outpoint_index)
+    }
+
+    /// Gets the scriptPubKey from a vout at a given output index
+    /// @param vout The vout vector
+    /// @param output_index The index of the output
+    /// @return The scriptPubKey (without length prefix)
+    public fun get_locking_script(vout: &vector<u8>, output_index: u64): vector<u8> {
+        let output = index_vout(vout, output_index);
+        script_pubkey(&output)
+    }
+
+    /// @notice Finds total outputs value
+    /// @dev Reverts if vout is null
+    /// @param vout The vout of a Bitcoin transaction
+    /// @return The total value of all outputs
+    public fun parse_outputs_total_value(vout: &vector<u8>): u64 {
+        assert!(try_as_vout(vout), EINVALID_VOUT);
+        let number_of_outputs = number_of_outputs(vout);
+        let mut total_value = 0u64;
+        let mut i = 0u64;
+        while (i < number_of_outputs) {
+            let output = index_vout(vout, i);
+            total_value = total_value + value(&output);
+            i = i + 1;
+        };
+        total_value
+    }
 }
