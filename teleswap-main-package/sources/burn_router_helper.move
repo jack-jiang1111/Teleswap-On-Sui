@@ -10,22 +10,22 @@ module teleswap::burn_router_helper {
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%
     
     // Error codes
-    const EALREADY_PAID: u64 = 3;
-    const EDEADLINE_NOT_PASSED: u64 = 4;
-    const EOLD_REQUEST: u64 = 5;
-    const ENOT_LOCKER: u64 = 6;
-    const EWRONG_INPUTS: u64 = 7;
-    const ENOT_FINALIZED: u64 = 8;
-    const EALREADY_USED: u64 = 9;
-    const EDEADLINE_NOT_PASSED_SLASH: u64 = 10;
-    const EWRONG_OUTPUT_TX: u64 = 11;
-    const ENOT_FOR_LOCKER: u64 = 12;
-    const ENON_ZERO_LOCK_TIME: u64 = 13;
-    const EWRONG_INDEXES: u64 = 14;
-    const ELOW_FEE: u64 = 15;
-    const EINVALID_SCRIPT: u64 = 16;
-    const EUNSORTED_VOUT_INDEXES: u64 = 17;
-    const EINVALID_VOUT: u64 = 18;
+    const EALREADY_PAID: u64 = 236;
+    const EDEADLINE_NOT_PASSED: u64 = 237;
+    const EOLD_REQUEST: u64 = 238;
+    const ENOT_LOCKER: u64 = 239;
+    const EWRONG_INPUTS: u64 = 240;
+    const ENOT_FINALIZED: u64 = 241;
+    const EALREADY_USED: u64 = 242;
+    const EDEADLINE_NOT_PASSED_SLASH: u64 = 243;
+    const EWRONG_OUTPUT_TX: u64 = 244;
+    const ENOT_FOR_LOCKER: u64 = 245;
+    const ENON_ZERO_LOCK_TIME: u64 = 246;
+    const EWRONG_INDEXES: u64 = 247;
+    const ELOW_FEE: u64 = 248;
+    const EINVALID_SCRIPT: u64 = 249;
+    const EUNSORTED_VOUT_INDEXES: u64 = 250;
+    const EINVALID_VOUT: u64 = 251;
 
     // ===== STRUCTURES =====
     public struct ScriptTypes has drop {

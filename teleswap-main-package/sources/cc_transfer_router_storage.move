@@ -2,12 +2,13 @@
 module teleswap::cc_transfer_router_storage {
     use sui::table::{Self, Table};
     use sui::event;
+    use btcrelay::btcrelay::BTCRelay;
 
     // === Error Codes ===
-    const EINVALID_PARAMETER: u64 = 0;
-    const EINVALID_ADMIN: u64 = 1;
-    const EZERO_ADDRESS: u64 = 3;
-    const EINVALID_THIRD_PARTY: u64 = 19;
+    const EINVALID_PARAMETER: u64 = 313;
+    const EINVALID_ADMIN: u64 = 314;
+    const EZERO_ADDRESS: u64 = 315;
+    const EINVALID_THIRD_PARTY: u64 = 316;
 
     // === Constants ===
     /// Maximum allowed percentage fee (100%)
@@ -53,6 +54,7 @@ module teleswap::cc_transfer_router_storage {
         special_teleporter: address,  // Special teleporter address
         treasury: address,            // Treasury address for fee collection
         locker_percentage_fee: u64,   // Locker fee percentage (0-10000)
+        btcrelay_object_id: ID,     // BTCRelay object ID
         
         // Storage tables
         transfer_requests: Table<vector<u8>, CCTransferRequest>,  // Maps tx_id to transfer request
@@ -151,6 +153,7 @@ module teleswap::cc_transfer_router_storage {
     /// @param special_teleporter Special teleporter address
     /// @param treasury Treasury address for fee collection
     /// @param locker_percentage_fee Locker fee percentage (0-10000)
+    /// @param btcrelay_object_id The legitimate BTCRelay object ID
     /// @param ctx Transaction context
     /// @return New CC transfer router instance
     public(package) fun create_cc_transfer_router(
@@ -161,6 +164,7 @@ module teleswap::cc_transfer_router_storage {
         special_teleporter: address,
         treasury: address,
         locker_percentage_fee: u64,
+        btcrelay_object_id: ID,
         ctx: &mut TxContext
     ): CCTransferRouterCap {
         // Validate fee percentages
@@ -176,12 +180,28 @@ module teleswap::cc_transfer_router_storage {
             special_teleporter,
             treasury,
             locker_percentage_fee,
+            btcrelay_object_id,
             transfer_requests: table::new(ctx),
             third_party_fees: table::new(ctx),
             third_party_addresses: table::new(ctx),
             third_party_mapping: table::new(ctx),
             owner: owner
         }
+    }
+
+    /// @notice Validates that the provided BTCRelay object is the legitimate one
+    /// @param router The CCTransferRouterCap object
+    /// @param btcrelay The BTCRelay object to validate
+    /// @return true if the BTCRelay is legitimate
+    public fun validate_btcrelay(router: &CCTransferRouterCap, btcrelay: &BTCRelay): bool {
+        object::id(btcrelay) == router.btcrelay_object_id
+    }
+
+    /// @notice Gets the legitimate BTCRelay object ID
+    /// @param router The CCTransferRouterCap object
+    /// @return The legitimate BTCRelay object ID
+    public fun get_btcrelay_object_id(router: &CCTransferRouterCap): ID {
+        router.btcrelay_object_id
     }
 
     /// Creates a new admin instance

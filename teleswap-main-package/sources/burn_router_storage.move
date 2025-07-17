@@ -1,15 +1,16 @@
 #[allow(unused_field,unused_variable)]
 module teleswap::burn_router_storage {
     use sui::table::{Self, Table};
+    use btcrelay::btcrelay::BTCRelay;
 
     // ===== CONSTANTS =====
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%
     const DUST_SATOSHI_AMOUNT: u64 = 1000;
 
     // Error codes
-    const EINVALID_ADMIN: u64 = 1;
-    const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 2;
-    const EALREADY_INITIALIZED: u64 = 33;
+    const EINVALID_ADMIN: u64 = 233;
+    const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 234;
+    const EALREADY_INITIALIZED: u64 = 235;
     // ===== STRUCTURES =====
     public struct BurnRequest has store, copy,drop {
         amount: u64,
@@ -22,19 +23,21 @@ module teleswap::burn_router_storage {
         request_id_of_locker: u64,
     }
 
-    // Main storage resource for BurnRouter
+    /// Main storage structure for the burn router
+    /// Manages all burn requests and configuration
     public struct BurnRouter has key,store {
         id: UID,
         owner: address,
         starting_block_number: u64,
         transfer_deadline: u64,
-        protocol_percentage_fee: u64, // Min amount is %0.01
+        protocol_percentage_fee: u64, // Min amount is %00.01        
+        locker_percentage_fee: u64, // Locker fee percentage
         slasher_percentage_reward: u64, // Min amount is %1
         bitcoin_fee: u64, // Fee of submitting a tx on Bitcoin
         treasury: address,
         bitcoin_fee_oracle: address,
-        
-        // Storage mappings converted to Move tables
+        wrapped_native_token: address,
+        btcrelay_object_id: ID, // Add field to store legitimate BTCRelay object ID
         burn_requests: Table<address, vector<BurnRequest>>, 
         // ^ Mapping from locker target address to assigned burn requests
         burn_request_counter: Table<address, u64>,
@@ -43,8 +46,6 @@ module teleswap::burn_router_storage {
 
         third_party_fee: Table<u64, u64>,
         third_party_address: Table<u64, address>,
-        wrapped_native_token: address,
-        locker_percentage_fee: u64,
     }
 
     /// Admin control structure for the contract
@@ -76,6 +77,21 @@ module teleswap::burn_router_storage {
     public fun get_locker_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.locker_percentage_fee }
     public fun get_treasury(burn_router: &BurnRouter): address { burn_router.treasury }
     public fun get_bitcoin_fee_oracle(burn_router: &BurnRouter): address { burn_router.bitcoin_fee_oracle }
+
+    /// @notice Validates that the provided BTCRelay object is the legitimate one
+    /// @param burn_router The BurnRouter object
+    /// @param btcrelay The BTCRelay object to validate
+    /// @return true if the BTCRelay is legitimate
+    public fun validate_btcrelay(burn_router: &BurnRouter, btcrelay: &BTCRelay): bool {
+        object::id(btcrelay) == burn_router.btcrelay_object_id
+    }
+
+    /// @notice Gets the legitimate BTCRelay object ID
+    /// @param burn_router The BurnRouter object
+    /// @return The legitimate BTCRelay object ID
+    public fun get_btcrelay_object_id(burn_router: &BurnRouter): ID {
+        burn_router.btcrelay_object_id
+    }
 
     // ===== FIELD GETTERS FOR BurnRequest =====
     public fun get_amount(request: &BurnRequest): u64 { request.amount }
@@ -344,6 +360,7 @@ module teleswap::burn_router_storage {
         treasury: address,
         bitcoin_fee_oracle: address,
         wrapped_native_token: address,
+        btcrelay_object_id: ID, // Add field to store legitimate BTCRelay object ID
         ctx: &mut TxContext
     ): BurnRouter {
         BurnRouter {
@@ -363,6 +380,7 @@ module teleswap::burn_router_storage {
             third_party_address: table::new(ctx),
             wrapped_native_token,
             locker_percentage_fee,
+            btcrelay_object_id, // Add field to store legitimate BTCRelay object ID
         }
     }
 

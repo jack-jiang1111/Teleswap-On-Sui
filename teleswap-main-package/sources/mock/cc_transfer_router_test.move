@@ -77,6 +77,7 @@ module teleswap::cc_transfer_router_test {
         special_teleporter: address,
         treasury: address,
         locker_percentage_fee: u64,
+        btcrelay_object_id: ID,
         admin: &mut CC_TRANSFER_ADMIN,
         ctx: &mut TxContext
     ){
@@ -89,6 +90,7 @@ module teleswap::cc_transfer_router_test {
             special_teleporter,
             treasury,
             locker_percentage_fee,
+            btcrelay_object_id,
             ctx
         );
         transfer::public_share_object(router);

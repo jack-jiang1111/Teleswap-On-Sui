@@ -15,39 +15,39 @@ module teleswap::burn_router_logic {
     const DUST_SATOSHI_AMOUNT: u64 = 1000;
     
     // Error codes
-    const EZERO_ADDRESS: u64 = 1;
-    const ENOT_ORACLE: u64 = 2;
-    const ELOW_STARTING_BLOCK: u64 = 3;
-    const EINVALID_FEE: u64 = 4;
-    const EINVALID_REWARD: u64 = 5;
-    const ELOW_DEADLINE: u64 = 6;
-    const ENOT_LOCKER: u64 = 7;
-    const ETRANSFER_FAILED: u64 = 8;
-    const EEXCHANGE_FAILED: u64 = 9;
-    const EINVALID_PATH: u64 = 10;
-    const EWRONG_AMOUNTS: u64 = 11;
-    const EINVALID_AMOUNT: u64 = 12;
-    const ELOW_AMOUNT: u64 = 13;
-    const EFEE_TRANSFER_FAILED: u64 = 14;
-    const ETHIRD_PARTY_FEE_TRANSFER_FAILED: u64 = 15;
-    const ENETWORK_FEE_TRANSFER_FAILED: u64 = 16;
-    const EALREADY_PAID: u64 = 17;
-    const EDEADLINE_NOT_PASSED: u64 = 18;
-    const EOLD_REQUEST: u64 = 19;
-    const EWRONG_INPUTS: u64 = 20;
-    const ENOT_FINALIZED: u64 = 21;
-    const EALREADY_USED: u64 = 22;
-    const EDEADLINE_NOT_PASSED_SLASH: u64 = 23;
-    const EWRONG_OUTPUT_TX: u64 = 24;
-    const ENOT_FOR_LOCKER: u64 = 25;
-    const ENON_ZERO_LOCK_TIME: u64 = 26;
-    const EWRONG_INDEXES: u64 = 27;
-    const ELOW_FEE: u64 = 28;
-    const EINVALID_SCRIPT: u64 = 29;
-    const EUNSORTED_VOUT_INDEXES: u64 = 30;
-    const EINVALID_BURN_PROOF: u64 = 31;
-    const EINVALID_LOCKER: u64 = 32;
-    const EALREADY_INITIALIZED: u64 = 33;
+    const EZERO_ADDRESS: u64 = 200;
+    const ENOT_ORACLE: u64 = 201;
+    const ELOW_STARTING_BLOCK: u64 = 202;
+    const EINVALID_FEE: u64 = 203;
+    const EINVALID_REWARD: u64 = 204;
+    const ELOW_DEADLINE: u64 = 205;
+    const ENOT_LOCKER: u64 = 206;
+    const ETRANSFER_FAILED: u64 = 207;
+    const EEXCHANGE_FAILED: u64 = 208;
+    const EINVALID_PATH: u64 = 209;
+    const EWRONG_AMOUNTS: u64 = 210;
+    const EINVALID_AMOUNT: u64 = 211;
+    const ELOW_AMOUNT: u64 = 212;
+    const EFEE_TRANSFER_FAILED: u64 = 213;
+    const ETHIRD_PARTY_FEE_TRANSFER_FAILED: u64 = 214;
+    const ENETWORK_FEE_TRANSFER_FAILED: u64 = 215;
+    const EALREADY_PAID: u64 = 216;
+    const EDEADLINE_NOT_PASSED: u64 = 217;
+    const EOLD_REQUEST: u64 = 218;
+    const EWRONG_INPUTS: u64 = 219;
+    const ENOT_FINALIZED: u64 = 220;
+    const EALREADY_USED: u64 = 221;
+    const EDEADLINE_NOT_PASSED_SLASH: u64 = 222;
+    const EWRONG_OUTPUT_TX: u64 = 223;
+    const ENOT_FOR_LOCKER: u64 = 224;
+    const ENON_ZERO_LOCK_TIME: u64 = 225;
+    const EWRONG_INDEXES: u64 = 226;
+    const ELOW_FEE: u64 = 227;
+    const EINVALID_SCRIPT: u64 = 228;
+    const EUNSORTED_VOUT_INDEXES: u64 = 229;
+    const EINVALID_BURN_PROOF: u64 = 230;
+    const EINVALID_LOCKER: u64 = 231;
+    const EALREADY_INITIALIZED: u64 = 232;
 
 
     // ===== EVENTS =====
@@ -99,6 +99,7 @@ module teleswap::burn_router_logic {
     /// @param bitcoin_fee Fee for submitting a Bitcoin transaction
     /// @param wrapped_native_token The wrapped native token address
     /// @param bitcoin_fee_oracle The Bitcoin fee oracle address
+    /// @param btcrelay_object_id The legitimate BTCRelay object ID
     /// @param ctx The transaction context
     public fun initialize(
         burn_admin: &mut BURN_ROUTER_ADMIN,
@@ -111,6 +112,7 @@ module teleswap::burn_router_logic {
         bitcoin_fee: u64,
         wrapped_native_token: address,
         bitcoin_fee_oracle: address,
+        btcrelay_object_id: ID,
         ctx: &mut TxContext
     ) {
         // Only allow initialization once, and set initialized in storage
@@ -126,6 +128,7 @@ module teleswap::burn_router_logic {
             treasury,
             bitcoin_fee_oracle,
             wrapped_native_token,
+            btcrelay_object_id,
             ctx
         );
         transfer::public_share_object(burn_router);
@@ -137,8 +140,8 @@ module teleswap::burn_router_logic {
     /// @param input_token The address of teleBTC (default)
     /// @param amount_coin The Coin containing teleBTC to burn
     /// @param user_script The user's Bitcoin script hash
-    /// @param script_type The user's script type
-    /// @param locker_locking_script The locker's Bitcoin locking script
+    /// @param script_type The users script type
+    /// @param locker_locking_script The lockers Bitcoin locking script
     /// @param third_party The third party id
     /// @param telebtc_cap The TeleBTC capability
     /// @param treasury_cap The protocol treasury capability
@@ -158,6 +161,12 @@ module teleswap::burn_router_logic {
         btcrelay: &BTCRelay,
         ctx: &mut TxContext
     ): u64 {
+        // Validate that the provided BTCRelay is the legitimate one
+        assert!(
+            burn_router_storage::validate_btcrelay(burn_router, btcrelay),
+            EINVALID_BURN_PROOF
+        );
+
         // Extract amount from coin
         let amount = coin::value(&amount_coin);
         let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script);
@@ -260,6 +269,12 @@ module teleswap::burn_router_logic {
         vout_indexes: vector<u64>,
         ctx: &mut TxContext
     ): bool {
+        // Validate that the provided BTCRelay is the legitimate one
+        assert!(
+            burn_router_storage::validate_btcrelay(burn_router, btcrelay),
+            EINVALID_BURN_PROOF
+        );
+
         // Get the Locker target address
         let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script);
         

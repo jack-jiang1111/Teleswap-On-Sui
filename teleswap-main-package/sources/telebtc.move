@@ -7,15 +7,15 @@ module teleswap::telebtc {
 
 
     // Error codes
-    const ENOT_OWNER: u64 = 2;
-    const ENOT_BLACKLISTER: u64 = 3;
-    const EALREADY_HAS_ROLE: u64 = 6;
-    const EDOES_NOT_HAVE_ROLE: u64 = 7;
-    const EZERO_VALUE: u64 = 8;
-    const EBLACKLISTED: u64 = 9;
-    const EMINT_LIMIT_EXCEEDED: u64 = 10;
-    const EEPOCH_MINT_LIMIT_REACHED: u64 = 11;
-    const EINVALID_ADMIN: u64 = 12;
+    const ENOT_OWNER: u64 = 400;
+    const ENOT_BLACKLISTER: u64 = 401;
+    const EALREADY_HAS_ROLE: u64 = 402;
+    const EDOES_NOT_HAVE_ROLE: u64 = 403;
+    const EZERO_VALUE: u64 = 404;
+    const EBLACKLISTED: u64 = 405;
+    const EMINT_LIMIT_EXCEEDED: u64 = 406;
+    const EEPOCH_MINT_LIMIT_REACHED: u64 = 407;
+    const EINVALID_ADMIN: u64 = 408;
 
 
     // Constants

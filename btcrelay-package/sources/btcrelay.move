@@ -12,25 +12,25 @@ module btcrelay::btcrelay {
     use btcrelay::bitcoin_helper;
 
     // === Error Codes ===
-    // Error codes for various validation and operation failures
-    const EINVALID_HEADER: u64 = 0;        // Invalid Bitcoin block header format
-    const EINVALID_CHAIN: u64 = 1;         // Invalid chain linkage between blocks
-    const EINVALID_POW: u64 = 2;           // Invalid proof of work
-    const EINVALID_TIMESTAMP: u64 = 3;     // Invalid block timestamp
-    const EINVALID_ADMIN: u64 = 4;         // Invalid admin operation
-    const EINVALID_PARAMETER: u64 = 5;     // Invalid parameter value
-    const EOUTDATE_HEADER: u64 = 6;        // Header is too old to be submitted
-    const EPAUSED: u64 = 7;                // Contract is paused
-    const EINVALID_TXID_OR_NODE: u64 = 8;  // Invalid transaction ID or Merkle tree node
-    const EEARLY_BLOCK: u64 = 9;           // Block hasn't reached finalization period
-    const EOUTDATE_BLOCK: u64 = 10;        // Block is too old for verification
-    const EUNEXPECTED_RETARGET: u64 = 11;  // Unexpected difficulty retarget
-    const EDUPLICATE_HEADER: u64 = 12;     // Duplicate block header submission
-    const ERETARGET_REQUIRED: u64 = 13;    // Need to call retarget function instead
-    const EALREADY_INITIALIZED: u64 = 14;  // Contract already initialized
-    const EINVALID_HASH: u64 = 15;         // Invalid hash value
-    const DEBUG_LOG: u64 = 8888;           // Debug logging code
-    const EINVALID_UPGRADE_CAP: u64 = 16;  // Invalid upgrade capability
+    // Error codes for various validation and operation failures (100-150)
+    const EINVALID_HEADER: u64 = 100;        // Invalid Bitcoin block header format
+    const EINVALID_CHAIN: u64 = 101;         // Invalid chain linkage between blocks
+    const EINVALID_POW: u64 = 102;           // Invalid proof of work
+    const EINVALID_TIMESTAMP: u64 = 103;     // Invalid block timestamp
+    const EINVALID_ADMIN: u64 = 104;         // Invalid admin operation
+    const EINVALID_PARAMETER: u64 = 105;     // Invalid parameter value
+    const EOUTDATE_HEADER: u64 = 106;        // Header is too old to be submitted
+    const EPAUSED: u64 = 107;                // Contract is paused
+    const EINVALID_TXID_OR_NODE: u64 = 108;  // Invalid transaction ID or Merkle tree node
+    const EEARLY_BLOCK: u64 = 109;           // Block hasn't reached finalization period
+    const EOUTDATE_BLOCK: u64 = 110;         // Block is too old for verification
+    const EUNEXPECTED_RETARGET: u64 = 111;   // Unexpected difficulty retarget
+    const EDUPLICATE_HEADER: u64 = 112;      // Duplicate block header submission
+    const ERETARGET_REQUIRED: u64 = 113;     // Need to call retarget function instead
+    const EALREADY_INITIALIZED: u64 = 114;   // Contract already initialized
+    const EINVALID_HASH: u64 = 115;          // Invalid hash value
+    const EINVALID_UPGRADE_CAP: u64 = 116;   // Invalid upgrade capability
+    const DEBUG_LOG: u64 = 150;              // Debug logging code
 
     // === Constants ===
     const ONE_HUNDRED_PERCENT: u64 = 10000;        // 100% in basis points

@@ -14,16 +14,16 @@ module btcrelay::bitcoin_helper {
     const RETARGET_PERIOD: u64 = 2 * 7 * 24 * 60 * 60;  // 2 weeks in seconds
     
     // Error codes
-    const EINVALID_HEADER: u64 = 101;
-    const EINVALID_MERKLE: u64 = 102;
-    const EINVALID_POW: u64 = 103;  
-    const EINVALID_VOUT: u64 = 104;
-    const EINVALID_SCRIPT: u64 = 105;
-    const EINVALID_COMPACT_INT: u64 = 106;
-    const ENON_MINIMAL_COMPACT_INT: u64 = 107;
-    const EINVALID_VOUT_LENGTH: u64 = 108;
-    const EINVALID_OP_RETURN: u64 = 109;
-    const EINVALID_SCRIPT_TYPE: u64 = 110;
+    const EINVALID_HEADER: u64 = 151;
+    const EINVALID_MERKLE: u64 = 152;
+    const EINVALID_POW: u64 = 153;  
+    const EINVALID_VOUT: u64 = 154;
+    const EINVALID_SCRIPT: u64 = 155;
+    const EINVALID_COMPACT_INT: u64 = 156;
+    const ENON_MINIMAL_COMPACT_INT: u64 = 157;
+    const EINVALID_VOUT_LENGTH: u64 = 158;
+    const EINVALID_OP_RETURN: u64 = 159;
+    const EINVALID_SCRIPT_TYPE: u64 = 160;
 
     public struct DebugEvent has copy, drop {
         vec1: vector<u8>,
