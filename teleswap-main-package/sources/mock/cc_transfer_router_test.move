@@ -113,7 +113,7 @@ module teleswap::cc_transfer_router_test {
         block_number: u64,
         intermediate_nodes: vector<u8>,
         index: u64,
-        relay: &mut BTCRelay
+        relay: & BTCRelay
     ): bool {
         btcrelay_mock::checkTxProof(
             relay,

@@ -81,6 +81,7 @@ sui client faucet
 npm test -- tests/btcrelay.test.ts
 npm test -- tests/telebtc.test.ts
 npm test -- tests/transfer.test.ts
+npm test -- tests/burn.test.ts
 ```
 
 8. Deploy the contract:
@@ -113,5 +114,5 @@ MIT
 -- Need to update deploy script due to directory messed up
 -- locker fee needs adjust in cc transfer contract
 -- Telebtc test rewrite due to telebtc restructure
--- btcrelay contract verify
+-- fix tests
 

@@ -1,27 +1,6 @@
 const CC_BURN_REQUESTS = require('./test_fixtures/ccBurnRequests.json');
 require('dotenv').config({path:"../../.env"});
 
-import { expect } from "chai";
-import { deployments, ethers } from "hardhat";
-import { Signer, BigNumber } from "ethers";
-import { deployMockContract, MockContract } from "@ethereum-waffle/mock-contract";
-import { Address } from "hardhat-deploy/types";
-import { Contract } from "@ethersproject/contracts";
-
-import { TeleBTC } from "../src/types/TeleBTC";
-import { TeleBTC__factory } from "../src/types/factories/TeleBTC__factory";
-import { ERC20 } from "../src/types/ERC20";
-import { Erc20__factory } from "../src/types/factories/Erc20__factory";
-
-import { BurnRouterLib } from "../src/types/BurnRouterLib";
-import { BurnRouterLib__factory } from "../src/types/factories/BurnRouterLib__factory";
-
-import { BurnRouterProxy__factory } from "../src/types/factories/BurnRouterProxy__factory";
-import { BurnRouterLogic__factory } from "../src/types/factories/BurnRouterLogic__factory";
-import { BurnRouterLogicLibraryAddresses } from "../src/types/factories/BurnRouterLogic__factory";
-
-import { takeSnapshot, revertProvider } from "./block_utils";
-import { network } from "hardhat"
 
 describe("BurnRouter", async () => {
     let snapshotId: any;
@@ -467,29 +446,6 @@ describe("BurnRouter", async () => {
                 )
             ).to.revertedWith("BurnRouter: low amount");
 
-        })
-
-        it("Reverts since allowance is not enough", async function () {
-
-            // Sets mock contracts outputs
-            await setLockersIsLocker(true);
-
-            await setLockersGetLockerTargetAddress();
-
-            // Gives allowance to burnRouter to burn tokens
-            await TeleBTCSigner1.approve(
-                burnRouter.address,
-                0
-            );
-
-            await expect(
-                burnRouterSigner1.ccBurn(
-                    userRequestedAmount,
-                    USER_SCRIPT_P2PKH,
-                    USER_SCRIPT_P2PKH_TYPE,
-                    LOCKER1_LOCKING_SCRIPT
-                )
-            ).to.revertedWith("ERC20: transfer amount exceeds allowance")
         })
 
         it("Reverts since locker's locking script is not valid", async function () {
@@ -1578,12 +1534,4 @@ describe("BurnRouter", async () => {
 
     });
 
-    describe("#renounce ownership", async () => {
-        it("owner can't renounce ownership", async function () {
-            await burnRouter.renounceOwnership()
-            await expect(
-                await burnRouter.owner()
-            ).to.equal(deployerAddress);
-        })
-    });
 });

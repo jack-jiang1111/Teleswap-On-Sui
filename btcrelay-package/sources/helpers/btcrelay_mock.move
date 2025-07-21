@@ -85,7 +85,7 @@ module btcrelay::btcrelay_mock {
     
     // mock function, always return true
     public fun checkTxProof(
-            relay: &mut BTCRelay,
+            relay: & BTCRelay,
             txid: vector<u8>,
             block_height: u64,
             intermediate_nodes: vector<u8>,
@@ -94,6 +94,14 @@ module btcrelay::btcrelay_mock {
             relay.test_Value
     }
 
+    // === Getter and Setter for lastSubmittedHeight ===
+    public fun lastSubmittedHeight(relay: &BTCRelay): u64 {
+        relay.lastSubmittedHeight
+    }
+
+    public fun set_last_submitted_height(relay: &mut BTCRelay, value: u64) {
+        relay.lastSubmittedHeight = value;
+    }
     
     // === Package Functions ===
 
