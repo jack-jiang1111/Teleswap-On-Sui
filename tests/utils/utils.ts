@@ -76,7 +76,14 @@ export function printEvents(result: any): void {
             // Print all fields
             Object.entries(parsed).forEach(([key, value]) => {
                 if (Array.isArray(value)) {
-                    console.log(`${key}: ${Buffer.from(value).toString('hex')}`);
+                    // Check if it's a byte array (for addresses, scripts, etc.)
+                    if (value.length > 0 && typeof value[0] === 'number' && value[0] <= 255) {
+                        // It's likely a byte array, convert to hex
+                        console.log(`${key}: ${Buffer.from(value).toString('hex')}`);
+                    } else {
+                        // It's a regular array of numbers, display as array
+                        console.log(`${key}: [${value.join(', ')}]`);
+                    }
                 } else {
                     console.log(`${key}: ${value}`);
                 }
@@ -125,4 +132,21 @@ export function remove0xPrefix(hex: string): string {
     // Remove '0x' prefix if present
     const cleanHex = hex.startsWith('0x') ? hex.slice(2) : hex;
     return cleanHex;
+}
+
+// Helper function to check if an event name is NOT contained in the events list
+export function eventNotContain(result: any, eventName: string): boolean {
+    if (!result.events || result.events.length === 0) {
+        return true; // No events means the event is not contained
+    }
+
+    for (const event of result.events) {
+        // Extract event name from type (everything after last ::)
+        const currentEventName = event.type.split('::').pop();
+        if (currentEventName === eventName) {
+            return false; // Event found, so it IS contained
+        }
+    }
+    
+    return true; // Event not found, so it is NOT contained
 }

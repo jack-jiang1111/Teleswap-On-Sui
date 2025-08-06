@@ -99,7 +99,8 @@ module btcrelay::btcrelay_mock {
         relay.lastSubmittedHeight
     }
 
-    public fun set_last_submitted_height(relay: &mut BTCRelay, value: u64) {
+    /// Public entry to set lastSubmittedHeight for testing
+    public entry fun set_last_submitted_height(relay: &mut BTCRelay, value: u64) {
         relay.lastSubmittedHeight = value;
     }
     

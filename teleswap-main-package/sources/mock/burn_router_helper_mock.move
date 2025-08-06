@@ -2,7 +2,7 @@
 module teleswap::burn_router_helper_mock {
     use sui::table::{Self, Table};
     use teleswap::burn_router_storage_mock::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
-    use teleswap::dummy_locker::{Self, LockerCapability};
+    use teleswap::dummy_locker::{Self, DummyLockerCap};
     use btcrelay::bitcoin_helper::{Self};
     use btcrelay::btcrelay_mock::{Self,BTCRelay};
     
@@ -22,20 +22,33 @@ module teleswap::burn_router_helper_mock {
     const ENOT_FOR_LOCKER: u64 = 245;
     const ENON_ZERO_LOCK_TIME: u64 = 246;
     const EWRONG_INDEXES: u64 = 247;
-    const ELOW_FEE: u64 = 248;
     const EINVALID_SCRIPT: u64 = 249;
     const EUNSORTED_VOUT_INDEXES: u64 = 250;
-    const EINVALID_VOUT: u64 = 251;
 
     // ===== STRUCTURES =====
-    public struct ScriptTypes has drop {
-        P2PK: u8,
-        P2WSH: u8,
-        P2TR: u8,
-        P2PKH: u8,
-        P2SH: u8,
-        P2WPKH: u8,
-    }
+    // P2PK: u8 = 1, 32bytes
+    // P2WSH: u8 = 2, 32bytes
+    // P2TR: u8 = 3, 32bytes
+    // P2PKH: u8 = 4, 20bytes
+    // P2SH: u8 = 5, 20bytes
+    // P2WPKH: u8 = 6, 20bytes
+
+
+    public struct DebugEvent has copy, drop {
+            vec1: vector<u8>,
+            vec2: vector<u8>,
+            vec3: vector<u64>,
+            vec4: vector<u64>,
+            num1: u256,
+            num2: u256,
+            num3: u256,
+            num4: u256,
+            addr1: address,
+            addr2: address,
+            addr3: address,
+            addr4: address,
+            bool1: bool,
+        }
 
     /// Local event for paid unwrap in helper
     public struct PaidUnwrapHelper has copy, drop {
@@ -136,10 +149,11 @@ module teleswap::burn_router_helper_mock {
         input_tx_id: vector<u8>,
         locktimes: vector<vector<u8>>, // [inputTxLocktime, outputTxLocktime]
         input_intermediate_nodes: vector<u8>,
-        indexes_and_block_numbers: vector<u64> // [inputIndex, inputTxIndex, inputTxBlockNumber]
+        indexes_and_block_numbers: vector<u64>, // [inputIndex, inputTxIndex, inputTxBlockNumber]
+        locker_cap: & DummyLockerCap
     ) {
         // 1. Check if the locking script is valid
-        assert!(dummy_locker::is_locker(locker_locking_script), ENOT_LOCKER);
+        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), ENOT_LOCKER);
 
         // 2. Check input array sizes
         assert!(vector::length(&versions) == 2 && vector::length(&locktimes) == 2 && vector::length(&indexes_and_block_numbers) == 3, EWRONG_INPUTS);
@@ -194,19 +208,26 @@ module teleswap::burn_router_helper_mock {
 
     /// @notice Validates burn proof parameters for a Bitcoin transaction.
     /// @dev Checks block number, locktime, script validity, and index lengths.
+    /// Validates that:
+    /// - Block number is >= starting block number
+    /// - Locktime is all zeros (no locktime)
+    /// - Locker locking script is valid
+    /// - Burn request indexes length matches vout indexes length
     /// @param block_number The block number of the tx
     /// @param starting_block_number The minimum valid block number
     /// @param locktime The locktime of the tx (should be all zeros)
     /// @param locker_locking_script The locker's Bitcoin locking script
     /// @param burn_req_indexes_length Number of burn request indexes
     /// @param vout_indexes_length Number of vout indexes
+    /// @param locker_cap The dummy locker capability
     public(package) fun burn_proof_helper(
         block_number: u64,
         starting_block_number: u64,
         locktime: vector<u8>,
         locker_locking_script: vector<u8>,
         burn_req_indexes_length: u64,
-        vout_indexes_length: u64
+        vout_indexes_length: u64,
+        locker_cap: & DummyLockerCap
     ) {
         // Check that block_number >= starting_block_number
         assert!(block_number >= starting_block_number, EOLD_REQUEST);
@@ -225,7 +246,7 @@ module teleswap::burn_router_helper_mock {
         assert!(is_all_zeros, ENON_ZERO_LOCK_TIME);
 
         // Check if the locking script is valid (must be a locker)
-        assert!(dummy_locker::is_locker(locker_locking_script), ENOT_LOCKER);
+        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), ENOT_LOCKER);
 
         // Check that burn_req_indexes_length == vout_indexes_length
         assert!(burn_req_indexes_length == vout_indexes_length, EWRONG_INDEXES);
@@ -233,19 +254,24 @@ module teleswap::burn_router_helper_mock {
 
     /// @notice Checks the user script type and locker validity.
     /// @dev Ensures script length matches type and locker is valid.
+    /// Validates that:
+    /// - Script length matches the script type requirements
+    /// - The given locking script belongs to a valid locker
     /// @param user_script The user's Bitcoin script
-    /// @param script_type The script type
+    /// @param script_type The script type (1=P2PK, 2=P2WSH, 3=P2TR, 4=P2PKH, 5=P2SH, 6=P2WPKH)
     /// @param locker_locking_script The locker's Bitcoin locking script
+    /// @param locker_cap The dummy locker capability
     public(package) fun check_script_type_and_locker(
         user_script: vector<u8>,
         script_type: u8,
-        locker_locking_script: vector<u8>
+        locker_locking_script: vector<u8>,
+        locker_cap: & DummyLockerCap
     ) {
         // Check script length based on script type using existing helper function
         assert!(validate_script_length(&user_script, script_type), EINVALID_SCRIPT);
 
         // Check if the given locking script is locker
-        assert!(dummy_locker::is_locker(locker_locking_script), ENOT_LOCKER);
+        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), ENOT_LOCKER);
     }
 
 
@@ -272,7 +298,7 @@ module teleswap::burn_router_helper_mock {
         let mut temp_vout_index = 0u64;
         let len = vector::length(&burn_req_indexes);
         let mut i = 0;
-
+        
         while (i < len) {
             let burn_req_index = *vector::borrow(&burn_req_indexes, i);
             let vout_index = *vector::borrow(&vout_indexes, i);
@@ -298,7 +324,6 @@ module teleswap::burn_router_helper_mock {
                     &burn_router_storage_mock::get_user_script(&request),
                     burn_router_storage_mock::get_script_type(&request)
                 );
-
                 // Check that locker has sent required teleBTC amount
                 if (burn_router_storage_mock::get_burnt_amount(&request) == parsed_amount) {
                     // Set is_transferred = true using setter
@@ -333,11 +358,12 @@ module teleswap::burn_router_helper_mock {
         burn_router: &BurnRouter,
         input_vout: vector<u8>,
         locker_locking_script: vector<u8>,
+        locker_cap: & DummyLockerCap
     ): (address, u64, u64) {
         // Find total value of malicious transaction (all outputs to locker)
         let total_value = bitcoin_helper::parse_outputs_total_value(&input_vout);
         // Get the target address of the locker from its Bitcoin address
-        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script);
+        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script,locker_cap);
         // Get slasher reward and max percentage fee from storage
         let slasher_percentage_reward = burn_router_storage_mock::get_slasher_percentage_reward(burn_router);
         let slasher_reward = (total_value * slasher_percentage_reward) / MAX_PERCENTAGE_FEE;
@@ -346,12 +372,21 @@ module teleswap::burn_router_helper_mock {
 
     // ===== HELPER FUNCTIONS =====
     /// @notice Validates script length based on type (P2PK, P2WSH, P2TR: 32 bytes; others: 20 bytes).
+    /// @dev Validates that the script length matches the expected length for the given script type.
+    /// Script types and their expected lengths:
+    /// - P2PK (1): 32 bytes (public key hash)
+    /// - P2WSH (2): 32 bytes (witness script hash)
+    /// - P2TR (3): 32 bytes (taproot output key)
+    /// - P2PKH (4): 20 bytes (public key hash)
+    /// - P2SH (5): 20 bytes (script hash)
+    /// - P2WPKH (6): 20 bytes (witness public key hash)
     /// @param user_script The user's Bitcoin script
-    /// @param script_type The script type
+    /// @param script_type The script type (1=P2PK, 2=P2WSH, 3=P2TR, 4=P2PKH, 5=P2SH, 6=P2WPKH)
     /// @return true if valid, false otherwise
     fun validate_script_length(user_script: &vector<u8>, script_type: u8): bool {
+        //P2PK	33 or 65 bytes	Full public key, not a hash (maybe modify in the future)
         let script_length = vector::length(user_script);
-        if (script_type == 0 || script_type == 1 || script_type == 2) {
+        if (script_type == 1 || script_type == 2 || script_type == 3) {
             // P2PK, P2WSH, P2TR should be 32 bytes
             script_length == 32
         } else {

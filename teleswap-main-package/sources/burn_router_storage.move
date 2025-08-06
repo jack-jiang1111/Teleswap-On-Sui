@@ -1,7 +1,7 @@
 #[allow(unused_field,unused_variable)]
 module teleswap::burn_router_storage {
     use sui::table::{Self, Table};
-    use btcrelay::btcrelay::BTCRelay;
+    use btcrelay::btcrelay_mock::{BTCRelay};
 
     // ===== CONSTANTS =====
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%
@@ -11,6 +11,7 @@ module teleswap::burn_router_storage {
     const EINVALID_ADMIN: u64 = 233;
     const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 234;
     const EALREADY_INITIALIZED: u64 = 235;
+    const EINVALID_FEE: u64 = 236;
     // ===== STRUCTURES =====
     public struct BurnRequest has store, copy,drop {
         amount: u64,
@@ -36,7 +37,6 @@ module teleswap::burn_router_storage {
         bitcoin_fee: u64, // Fee of submitting a tx on Bitcoin
         treasury: address,
         bitcoin_fee_oracle: address,
-        wrapped_native_token: address,
         btcrelay_object_id: ID, // Add field to store legitimate BTCRelay object ID
         burn_requests: Table<address, vector<BurnRequest>>, 
         // ^ Mapping from locker target address to assigned burn requests
@@ -73,7 +73,6 @@ module teleswap::burn_router_storage {
     public fun get_protocol_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.protocol_percentage_fee }
     public fun get_slasher_percentage_reward(burn_router: &BurnRouter): u64 { burn_router.slasher_percentage_reward }
     public fun get_bitcoin_fee(burn_router: &BurnRouter): u64 { burn_router.bitcoin_fee }
-    public fun get_wrapped_native_token(burn_router: &BurnRouter): address { burn_router.wrapped_native_token }
     public fun get_locker_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.locker_percentage_fee }
     public fun get_treasury(burn_router: &BurnRouter): address { burn_router.treasury }
     public fun get_bitcoin_fee_oracle(burn_router: &BurnRouter): address { burn_router.bitcoin_fee_oracle }
@@ -115,19 +114,22 @@ module teleswap::burn_router_storage {
     }
     public fun set_protocol_percentage_fee(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, fee: u64) {
         assert_admin(burn_admin.owner, burn_router);
+        assert!(fee <= MAX_PERCENTAGE_FEE, EINVALID_FEE);
         burn_router.protocol_percentage_fee = fee;
     }
     public fun set_slasher_percentage_reward(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, reward: u64) {
         assert_admin(burn_admin.owner, burn_router);
+        assert!(reward <= MAX_PERCENTAGE_FEE, EINVALID_FEE);
         burn_router.slasher_percentage_reward = reward;
-    }
-    public fun set_wrapped_native_token(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, token: address) {
-        assert_admin(burn_admin.owner, burn_router);
-        burn_router.wrapped_native_token = token;
     }
     public fun set_locker_percentage_fee(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, fee: u64) {
         assert_admin(burn_admin.owner, burn_router);
+        assert!(fee <= MAX_PERCENTAGE_FEE, EINVALID_FEE);
         burn_router.locker_percentage_fee = fee;
+    }
+    public fun set_bitcoin_fee(burn_router: &mut BurnRouter, fee: u64, ctx: &TxContext) {
+        assert!(burn_router.bitcoin_fee_oracle == tx_context::sender(ctx), EINVALID_ADMIN);
+        burn_router.bitcoin_fee = fee;
     }
     // ===== TABLE OPERATIONS =====
     public fun get_burn_requests(burn_router: &BurnRouter, locker_target_address: address): vector<BurnRequest> {
@@ -359,7 +361,6 @@ module teleswap::burn_router_storage {
         bitcoin_fee: u64,
         treasury: address,
         bitcoin_fee_oracle: address,
-        wrapped_native_token: address,
         btcrelay_object_id: ID, // Add field to store legitimate BTCRelay object ID
         ctx: &mut TxContext
     ): BurnRouter {
@@ -378,7 +379,6 @@ module teleswap::burn_router_storage {
             is_used_as_burn_proof: table::new(ctx),
             third_party_fee: table::new(ctx),
             third_party_address: table::new(ctx),
-            wrapped_native_token,
             locker_percentage_fee,
             btcrelay_object_id, // Add field to store legitimate BTCRelay object ID
         }

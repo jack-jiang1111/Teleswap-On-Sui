@@ -687,17 +687,17 @@ module btcrelay::bitcoin_helper {
         let script_pubkey = script_pubkey(&output);
         let script_len = vector::length(&script_pubkey);
 
-        let matches = if (script_type == 2) { // P2TR
+        let matches = if (script_type == 3) { // P2TR
             script_len >= 34 && vector_sub(&script_pubkey, 2, 32) == *user_script
-        } else if (script_type == 0) { // P2PK
+        } else if (script_type == 1) { // P2PK
             script_len >= 33 && vector_sub(&script_pubkey, 1, 32) == *user_script
-        } else if (script_type == 3) { // P2PKH
+        } else if (script_type == 4) { // P2PKH
             script_len >= 23 && vector_sub(&script_pubkey, 3, 20) == *user_script
-        } else if (script_type == 4) { // P2SH
+        } else if (script_type == 5) { // P2SH
             script_len >= 23 && vector_sub(&script_pubkey, 2, 20) == *user_script
-        } else if (script_type == 5) { // P2WPKH
+        } else if (script_type == 6) { // P2WPKH
             script_len >= 22 && vector_sub(&script_pubkey, 2, 20) == *user_script
-        } else if (script_type == 1) { // P2WSH
+        } else if (script_type == 2) { // P2WSH
             script_len >= 34 && vector_sub(&script_pubkey, 2, 32) == *user_script
         } else {
             abort EINVALID_SCRIPT_TYPE

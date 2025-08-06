@@ -83,7 +83,7 @@ export async function CCBurnFactory() {
     let btcrelayCapId = btcrelayResult.btcRelayId;
     let btcrelayAdminId = btcrelayResult.relayAdminId;
 
-    let lockerCapabilityId = "";
+    let dummyLockerCapId = "";
 
     // Get modules bytecode (now from the rebuilt package)
     const burnRouterStorageModule = fs.readFileSync(
@@ -102,7 +102,7 @@ export async function CCBurnFactory() {
         path.join(__dirname, '../../btcrelay-package/build/btcrelay/bytecode_modules/bitcoin_helper.mv')
     );
     const telebtcModule = fs.readFileSync(
-        path.join(__dirname, '../../teleswap-main-package/build/teleswap/bytecode_modules/telebtc.mv')
+        path.join(__dirname, '../../teleswap-main-package/build/teleswap/bytecode_modules/telebtc_mock.mv')
     );
 
     let tx = new TransactionBlock();
@@ -148,8 +148,8 @@ export async function CCBurnFactory() {
         else if (type.includes('BURN_ROUTER_ADMIN')) {
             burnRouterAdminId = objectId;
         }
-        else if (type.includes('LockerCapability')) {
-            lockerCapabilityId = objectId;
+        else if (type.includes('DummyLockerCap')) {
+            dummyLockerCapId = objectId;
         }
         else if (type.includes('TreasuryCap')) {
             telebtcTreasuryCapId = objectId;
@@ -171,7 +171,7 @@ export async function CCBurnFactory() {
     console.log('BTC Relay Package ID:', btcrelayPackageId);
     console.log('BTC Relay Cap ID:', btcrelayCapId);
     console.log('BTC Relay Admin ID:', btcrelayAdminId);
-    console.log('Locker Capability ID:', lockerCapabilityId);
+    console.log('Locker Capability ID:', dummyLockerCapId);
 
     // Return all the important variables
     return {
@@ -190,6 +190,6 @@ export async function CCBurnFactory() {
         btcrelayAdminId,
 
         // Locker Capability
-        lockerCapabilityId,
+        dummyLockerCapId,
     };
 }

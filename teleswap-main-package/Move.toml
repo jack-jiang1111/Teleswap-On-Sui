@@ -9,5 +9,5 @@ btcrelay = { local = "../btcrelay-package" }
 
 [addresses]
 teleswap = "0x0"
-btcrelay = "0xa1a97cdd2dec9c8e455d37b92cce54486c718d6ccf761fd75023f7815eef228c"
+btcrelay = "0x5dc77860630b342ab704482f11ccd474b7c519e14764cafd5c1369aaa98ef328"
 sui = "0x2" 

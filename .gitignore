@@ -36,3 +36,5 @@ package-id.json
 
 # Sol files
 *.sol
+
+ena.js

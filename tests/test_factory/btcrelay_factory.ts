@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {  printEvents, verifyUpgradeCap } from '../utils/utils';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
+const { execSync } = require('child_process');
 // Function to update Move.toml with actual package IDs
 function ResetBtcrelayMoveToml() {
 
@@ -23,9 +24,23 @@ function ResetBtcrelayMoveToml() {
     fs.writeFileSync(btcrelayMoveTomlPath, btcrelayMoveTomlContent);
     console.log('Reset btcrelay-package/Move.toml');
 
+
+    // Update teleswap-main-package/Move.toml
+    const teleswapMainPackageMoveTomlPath = path.join(__dirname, '../../teleswap-main-package/Move.toml');
+    let teleswapMainPackageMoveTomlContent = fs.readFileSync(teleswapMainPackageMoveTomlPath, 'utf8');
+    
+    // Update the btcrelay address from 0x0 to the deployed package ID
+    teleswapMainPackageMoveTomlContent = teleswapMainPackageMoveTomlContent.replace(
+        /teleswap_main = "[^"]*"/,
+        `teleswap_main = "0x0"`
+    );
+    
+    fs.writeFileSync(teleswapMainPackageMoveTomlPath, teleswapMainPackageMoveTomlContent);
+    console.log('Reset teleswap-main-package/Move.toml');
+
     // Rebuild the package with updated dependencies
     console.log('Rebuilding package with updated dependencies...');
-    const { execSync } = require('child_process');
+    
     try {
         const teleswapMainPackagePath = path.join(__dirname, '../../btcrelay-package');
         execSync('sui move build --skip-fetch-latest-git-deps', { 
@@ -76,7 +91,6 @@ export async function BtcRelayFactory(genesisHeader: string, height: number, per
 
     // Transfer the UpgradeCap to the deployer
     tx.transferObjects([upgradeCap], tx.pure(deployer.toSuiAddress()));
-
     let result = await client.signAndExecuteTransactionBlock({
         transactionBlock: tx,
         signer: deployer,

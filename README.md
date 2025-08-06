@@ -84,7 +84,7 @@ npm test -- tests/transfer.test.ts
 npm test -- tests/burn.test.ts
 ```
 
-8. Deploy the contract:
+8. Deploy the contract (under maintain):
 ```bash
 # Deploy the contract to mainnet/testnet/local 
 npx ts-node scripts/deploy/01-deploy_btc_relay.ts [network]
@@ -103,16 +103,16 @@ MIT
 2. Package id won't change when upgrading the contract (In Move, the address must be known at compile time for use statements. You cannot dynamically import a module at runtime.)
 3. The bridge/locker/burner/exchange/telebtc contracts will depend on each other by "use module"
 4. Development order: 
-
-  (4) burner testing
   (5) locker contract
   (6) locker contract testing
   (7) bridge contract/burner contract retesting with real locker contract
   (8) exchange contract
   (9) exchange contract testing
 
+Other TODO:
 -- Need to update deploy script due to directory messed up
--- locker fee needs adjust in cc transfer contract
--- Telebtc test rewrite due to telebtc restructure
--- fix tests
+-- locker fee needs adjust in cc transfer contract after finishing the locker contract
+-- Telebtc test rewrite due to telebtc restructure (will do after locker contract)
+-- fix tests (after locker contract)
+-- swap and burn in burn router will be finished after the exchange contract
 

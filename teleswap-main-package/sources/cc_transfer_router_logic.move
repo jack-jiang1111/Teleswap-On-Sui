@@ -1,9 +1,9 @@
 #[allow( lint(self_transfer),lint(share_owned))]
 module teleswap::cc_transfer_router_logic {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
-    use teleswap::telebtc::{TeleBTCCap, TELEBTC};
+    use teleswap::telebtc_mock::{TeleBTCCap, TELEBTC_MOCK};
     use btcrelay::btcrelay::{Self, BTCRelay};
-    use teleswap::dummy_locker::{Self, LockerCapability};
+    use teleswap::dummy_locker::{Self, DummyLockerCap};
     use btcrelay::bitcoin_helper;
     use teleswap::request_parser;
     use sui::coin::{Self, TreasuryCap};
@@ -130,11 +130,11 @@ module teleswap::cc_transfer_router_logic {
     /// @return Tuple of (amount, remained_amount, network_fee, locker_fee, protocol_fee, third_party_fee, recipient_address)
     fun mint_and_distribute(
         router: & CCTransferRouterCap,
-        locker_cap: &mut LockerCapability,
+        locker_cap: &mut DummyLockerCap,
         locker_locking_script: vector<u8>,
         tx_id: vector<u8>,
         telebtc_cap: &mut TeleBTCCap,
-        treasury_cap: &mut TreasuryCap<TELEBTC>,
+        treasury_cap: &mut TreasuryCap<TELEBTC_MOCK>,
         ctx: &mut TxContext
     ):(u64,u64,u64,u64,u64,u64,address){
         // Calculate fees
@@ -190,10 +190,11 @@ module teleswap::cc_transfer_router_logic {
         router: &mut CCTransferRouterCap,
         locker_locking_script: vector<u8>,
         vout: vector<u8>,
-        tx_id: vector<u8>
+        tx_id: vector<u8>,
+        locker_cap: & DummyLockerCap
     ) {
         // Verify locker exists
-        assert!(dummy_locker::is_locker(locker_locking_script), EINVALID_LOCKER);
+        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), EINVALID_LOCKER);
 
         // Extract value and opreturn data from request
         let (input_amount, arbitrary_data) = bitcoin_helper::parse_value_and_data_having_locking_script_small_payload(
@@ -257,10 +258,10 @@ module teleswap::cc_transfer_router_logic {
         router: &mut CCTransferRouterCap,
         tx_and_proof: TxAndProof,
         locker_locking_script: vector<u8>,
-        locker_cap: &mut LockerCapability,
+        locker_cap: &mut DummyLockerCap,
         relay: &mut BTCRelay,
         telebtc_cap: &mut TeleBTCCap,
-        treasury_cap: &mut TreasuryCap<TELEBTC>,
+        treasury_cap: &mut TreasuryCap<TELEBTC_MOCK>,
         ctx: &mut TxContext
     ) {
         // Validate that the provided BTCRelay is the legitimate one
@@ -304,7 +305,8 @@ module teleswap::cc_transfer_router_logic {
             router,
             locker_locking_script,
             cc_transfer_router_storage::get_vout(&tx_and_proof),
-            tx_id
+            tx_id,
+            locker_cap
         );
 
         // Verify transaction is confirmed
@@ -320,7 +322,7 @@ module teleswap::cc_transfer_router_logic {
         );
 
         // Get locker target address
-        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script);
+        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script,locker_cap);
 
         // Process the wrap request
         let (amount,received_amount,network_fee,locker_fee,protocol_fee,third_party_fee,recipient_address) = mint_and_distribute(router, locker_cap, locker_locking_script, tx_id, telebtc_cap, treasury_cap, ctx);

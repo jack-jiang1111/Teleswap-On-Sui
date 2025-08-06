@@ -3,6 +3,7 @@ import { TeleBTCFactory } from './test_factory/telebtc_factory';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
+import { splitGasTokens } from './utils/move-helper';
 
 
 
@@ -32,28 +33,7 @@ async function advanceEpoch(client: SuiClient, deployer: any) {
     expect(result.effects?.status?.status).toBe('success');
 }
 
-async function splitGasTokens(client: SuiClient, deployer: any, recipient: string, amount: number) {
-    const tx = new TransactionBlock();
-    
-    // Get the gas object from the deployer
-    const [coin] = tx.splitCoins(tx.gas, [tx.pure(amount)]);
-    
-    // Transfer the split coin to the recipient
-    tx.transferObjects([coin], tx.pure(recipient));
 
-    const result = await client.signAndExecuteTransactionBlock({
-        transactionBlock: tx,
-        signer: deployer,
-        options: { 
-            showEffects: true,
-            showEvents: true
-        }
-    });
-
-    expect(result.effects?.status?.status).toBe('success');
-    console.log(`Transferred ${amount} gas tokens to ${recipient}`);
-    return result;
-}
 
 describe('TeleBTC Tests', () => {
     let client: SuiClient;

@@ -11,6 +11,7 @@ module teleswap::burn_router_storage_mock {
     const EINVALID_ADMIN: u64 = 233;
     const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 234;
     const EALREADY_INITIALIZED: u64 = 235;
+    const EINVALID_FEE: u64 = 236;
     // ===== STRUCTURES =====
     public struct BurnRequest has store, copy,drop {
         amount: u64,
@@ -36,7 +37,6 @@ module teleswap::burn_router_storage_mock {
         bitcoin_fee: u64, // Fee of submitting a tx on Bitcoin
         treasury: address,
         bitcoin_fee_oracle: address,
-        wrapped_native_token: address,
         btcrelay_object_id: ID, // Add field to store legitimate BTCRelay object ID
         burn_requests: Table<address, vector<BurnRequest>>, 
         // ^ Mapping from locker target address to assigned burn requests
@@ -73,20 +73,25 @@ module teleswap::burn_router_storage_mock {
     public fun get_protocol_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.protocol_percentage_fee }
     public fun get_slasher_percentage_reward(burn_router: &BurnRouter): u64 { burn_router.slasher_percentage_reward }
     public fun get_bitcoin_fee(burn_router: &BurnRouter): u64 { burn_router.bitcoin_fee }
-    public fun get_wrapped_native_token(burn_router: &BurnRouter): address { burn_router.wrapped_native_token }
     public fun get_locker_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.locker_percentage_fee }
     public fun get_treasury(burn_router: &BurnRouter): address { burn_router.treasury }
     public fun get_bitcoin_fee_oracle(burn_router: &BurnRouter): address { burn_router.bitcoin_fee_oracle }
 
     /// @notice Validates that the provided BTCRelay object is the legitimate one
+    /// @dev Compares the object ID with the stored legitimate BTCRelay ID.
+    /// This ensures that only the authorized BTCRelay instance can be used
+    /// for burn proof validation and dispute operations.
     /// @param burn_router The BurnRouter object
     /// @param btcrelay The BTCRelay object to validate
-    /// @return true if the BTCRelay is legitimate
+    /// @return true if the BTCRelay is legitimate, false otherwise
     public fun validate_btcrelay(burn_router: &BurnRouter, btcrelay: &BTCRelay): bool {
         object::id(btcrelay) == burn_router.btcrelay_object_id
     }
 
     /// @notice Gets the legitimate BTCRelay object ID
+    /// @dev Returns the stored BTCRelay object ID for validation purposes.
+    /// This ID is set during initialization and used to validate that
+    /// only the authorized BTCRelay instance is used.
     /// @param burn_router The BurnRouter object
     /// @return The legitimate BTCRelay object ID
     public fun get_btcrelay_object_id(burn_router: &BurnRouter): ID {
@@ -115,19 +120,22 @@ module teleswap::burn_router_storage_mock {
     }
     public fun set_protocol_percentage_fee(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, fee: u64) {
         assert_admin(burn_admin.owner, burn_router);
+        assert!(fee <= MAX_PERCENTAGE_FEE, EINVALID_FEE);
         burn_router.protocol_percentage_fee = fee;
     }
     public fun set_slasher_percentage_reward(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, reward: u64) {
         assert_admin(burn_admin.owner, burn_router);
+        assert!(reward <= MAX_PERCENTAGE_FEE, EINVALID_FEE);
         burn_router.slasher_percentage_reward = reward;
-    }
-    public fun set_wrapped_native_token(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, token: address) {
-        assert_admin(burn_admin.owner, burn_router);
-        burn_router.wrapped_native_token = token;
     }
     public fun set_locker_percentage_fee(burn_admin: &BURN_ROUTER_ADMIN, burn_router: &mut BurnRouter, fee: u64) {
         assert_admin(burn_admin.owner, burn_router);
+        assert!(fee <= MAX_PERCENTAGE_FEE, EINVALID_FEE);
         burn_router.locker_percentage_fee = fee;
+    }
+    public fun set_bitcoin_fee(burn_router: &mut BurnRouter, fee: u64, ctx: &TxContext) {
+        assert!(burn_router.bitcoin_fee_oracle == tx_context::sender(ctx), EINVALID_ADMIN);
+        burn_router.bitcoin_fee = fee;
     }
     // ===== TABLE OPERATIONS =====
     public fun get_burn_requests(burn_router: &BurnRouter, locker_target_address: address): vector<BurnRequest> {
@@ -359,7 +367,6 @@ module teleswap::burn_router_storage_mock {
         bitcoin_fee: u64,
         treasury: address,
         bitcoin_fee_oracle: address,
-        wrapped_native_token: address,
         btcrelay_object_id: ID, // Add field to store legitimate BTCRelay object ID
         ctx: &mut TxContext
     ): BurnRouter {
@@ -378,7 +385,6 @@ module teleswap::burn_router_storage_mock {
             is_used_as_burn_proof: table::new(ctx),
             third_party_fee: table::new(ctx),
             third_party_address: table::new(ctx),
-            wrapped_native_token,
             locker_percentage_fee,
             btcrelay_object_id, // Add field to store legitimate BTCRelay object ID
         }
