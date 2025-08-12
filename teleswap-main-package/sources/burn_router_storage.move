@@ -1,7 +1,7 @@
 #[allow(unused_field,unused_variable)]
 module teleswap::burn_router_storage {
     use sui::table::{Self, Table};
-    use btcrelay::btcrelay_mock::{BTCRelay};
+    use btcrelay::btcrelay::{BTCRelay};
 
     // ===== CONSTANTS =====
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%
