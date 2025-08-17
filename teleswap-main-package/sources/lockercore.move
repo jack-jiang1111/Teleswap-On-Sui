@@ -1,44 +1,29 @@
-#[allow(unused_field, unused_variable, unused_const, unused_use, lint(self_transfer))]
+#[allow(lint(self_transfer))]
 module teleswap::lockercore {
 
 
     // Import from storage and helper
-    use teleswap::lockerstorage::{Self, LockerCap, Locker, LockersLibConstants, LockerAdminCap, WBTC};
+    use teleswap::lockerstorage::{Self, LockerCap, LockerAdminCap};
     use teleswap::lockerhelper::{Self};
     use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
     
     // Import burn router and related modules
     // Note: Burn router functionality moved to lockerhelper to avoid circular dependencies
     use teleswap::burn_router_storage::{BurnRouter};
-    use btcrelay::btcrelay::{Self, BTCRelay};
+    use btcrelay::btcrelay::{BTCRelay};
     use teleswap::burn_router_locker_connector::{Self};
     // Import Sui modules
-    use sui::event;
     use sui::coin::{Self, Coin, TreasuryCap};
-    use sui::balance::{Self, Balance};
-    use sui::sui::SUI;
-    use teleswap::lockerstorage::get_wbtc_collateral_balance;
 
     // Error constants
-    const ERROR_ZERO_ADDRESS: u64 = 1;
-    const ERROR_ZERO_VALUE: u64 = 2;
-    const ERROR_NOT_BURNER: u64 = 3;
-    const ERROR_NOT_MINTER: u64 = 4;
-    const ERROR_NOT_LOCKER: u64 = 5;
-    const ERROR_TRANSFER_FAILED: u64 = 6;
-    const ERROR_LOCKER_ACTIVE: u64 = 7;
-    const ERROR_LOCKER_NOT_ACTIVE: u64 = 8;
-    const ERROR_INVALID_VALUE: u64 = 9;
-    const ERROR_ALREADY_HAS_ROLE: u64 = 10;
-    const ERROR_NOT_REQUESTED: u64 = 11;
-    const ERROR_BURN_FAILED: u64 = 12;
-    const ERROR_INSUFFICIENT_FUNDS: u64 = 13;
-    const NATIVE_TOKEN: address = @0x1;
-    const ERROR_IS_PAUSED: u64 = 14;
+    const ERROR_ZERO_VALUE: u64 = 530;
+    const ERROR_LOCKER_NOT_ACTIVE: u64 = 531;
+    const ERROR_BURN_FAILED: u64 = 532;
+    const ERROR_INSUFFICIENT_FUNDS: u64 = 533;
+    const ERROR_IS_PAUSED: u64 = 534;
 
     // WBTC constants
     const WBTC_ADDRESS: address = @0xaafb102dd0902f5055cadecd687fb5b71ca82ef0e0285d90afde828ec58ca96b;
-    const WBTC_DECIMALS: u64 = 8;
 
     /// @notice Mints TeleBTC tokens will only be called by the cctransfer contract
     /// @param _locker_locking_script Locker locking script

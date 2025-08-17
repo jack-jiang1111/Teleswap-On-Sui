@@ -1,21 +1,16 @@
-#[allow(unused_field, unused_variable, unused_const, unused_use)]
+#[allow(unused_field, unused_variable, unused_use)]
 module teleswap::lockerstorage {
     use sui::event;
     use sui::table::{Self, Table};
     use sui::balance::{Self, Balance};
     use sui::coin::{Self, Coin};
     use sui::sui::SUI;
+    
 
     use std::bcs;
     use teleswap::price_oracle;
     use teleswap::telebtc::{Self, TELEBTC};
-
-    // ============================================================================
-    // TYPE DEFINITIONS
-    // ============================================================================
-
-    /// WBTC token type for collateral storage
-    public struct WBTC has drop {}
+    use teleswap::wbtc::{WBTC};
 
     // ============================================================================
     // CONSTANTS
@@ -26,26 +21,25 @@ module teleswap::lockerstorage {
     const HEALTH_FACTOR: u64 = 10000;
     const UPPER_HEALTH_FACTOR: u64 = 12500;
     const MAX_LOCKER_FEE: u64 = 10000;
-    const INACTIVATION_DELAY: u64 = 345600; // 4 days
+   
     const NATIVE_TOKEN_DECIMAL: u8 = 18;
     const NATIVE_TOKEN: address = @0x1;
 
     // WBTC constants
-    const WBTC_ADDRESS: address = @0xaafb102dd0902f5055cadecd687fb5b71ca82ef0e0285d90afde828ec58ca96b;
-    const WBTC_DECIMALS: u64 = 8;
+    const WBTC_ADDRESS: address = @wbtc;
+    //const WBTC_DECIMALS: u64 = 8;
 
     // Error constants
-    const ERROR_NOT_ADMIN: u64 = 1;
-    const ERROR_ALREADY_INITIALIZED: u64 = 2;
-    const ERROR_NOT_INITIALIZED: u64 = 3;
-    const ERROR_ZERO_ADDRESS: u64 = 4;
-    const ERROR_ZERO_VALUE: u64 = 5;
-    const ERROR_INVALID_VALUE: u64 = 6;
-    const ERROR_INSUFFICIENT_FUNDS: u64 = 7;
-    const ERROR_INSUFFICIENT_VAULT_BALANCE: u64 = 8;
-    const ERROR_INVALID_TOKEN: u64 = 9;
-    const ERROR_INVALID_GET: u64 = 10;
-    const ERROR_IS_PAUSED: u64 = 11;
+    const ERROR_NOT_ADMIN: u64 = 500;
+    const ERROR_ALREADY_INITIALIZED: u64 = 501;
+    const ERROR_ZERO_ADDRESS: u64 = 502;
+    const ERROR_ZERO_VALUE: u64 = 503;
+    const ERROR_INVALID_VALUE: u64 = 504;
+    const ERROR_INSUFFICIENT_VAULT_BALANCE: u64 = 505;
+    const ERROR_INVALID_GET: u64 = 506;
+    const ERROR_IS_PAUSED: u64 = 507;
+    const ERROR_IS_UNPAUSED: u64 = 508;
+    const ERROR_NOT_REQUESTED: u64 = 515;
 
     // ============================================================================
     // STRUCTS
@@ -102,7 +96,6 @@ module teleswap::lockerstorage {
         locker_collateral_decimal: Table<address, u8>, // locker collateral token address -> u8 (decimal places)
         locker_collateral_token: Table<address, address>, // locker target address -> locker collateral token address
         locker_reliability_factor: Table<address, u64>, // locker target address -> u64 (reliability factor)
-        reward_distributor: address,
         // WBTC vault storage - only lockercore can access these
         wbtc_vault: Balance<WBTC>, // WBTC collateral vault
     }
@@ -323,7 +316,6 @@ module teleswap::lockerstorage {
     /// @param collateral_ratio Collateral ratio
     /// @param liquidation_ratio Liquidation ratio
     /// @param price_with_discount_ratio Price discount ratio
-    /// @param reward_distributor The reward distributor address
     /// @param ctx The transaction context
     public fun initialize(
         admin_cap: &mut LockerAdminCap,
@@ -331,7 +323,6 @@ module teleswap::lockerstorage {
         collateral_ratio: u64,
         liquidation_ratio: u64,
         price_with_discount_ratio: u64,
-        reward_distributor: address,
         ctx: &mut TxContext
     ) {
         // Check if already initialized
@@ -371,7 +362,6 @@ module teleswap::lockerstorage {
             locker_collateral_decimal: table::new(ctx),
             locker_collateral_token: table::new(ctx),
             locker_reliability_factor: table::new(ctx),
-            reward_distributor,
             // Initialize WBTC vault storage
             wbtc_vault: balance::zero(),
         };
@@ -388,7 +378,7 @@ module teleswap::lockerstorage {
     /// @param admin_cap The admin capability object
     /// @param locker_cap The locker capability object
     /// @param ctx Transaction context
-    public fun assert_admin(admin_cap: &LockerAdminCap, locker_cap: &LockerCap, ctx: &TxContext) {
+    public(package) fun assert_admin(admin_cap: &LockerAdminCap, locker_cap: &LockerCap, ctx: &TxContext) {
         assert!(tx_context::sender(ctx) == locker_cap.admin_address, ERROR_NOT_ADMIN);
     }
 
@@ -398,6 +388,7 @@ module teleswap::lockerstorage {
     /// @param ctx Transaction context
     public fun pause_locker(admin_cap: &LockerAdminCap, locker_cap: &mut LockerCap, ctx: &TxContext) {
         assert_admin(admin_cap, locker_cap, ctx);
+        assert!(!locker_cap.paused, ERROR_IS_PAUSED);
         locker_cap.paused = true;
         event::emit(LockerPausedEvent {
             paused_by: tx_context::sender(ctx),
@@ -411,6 +402,7 @@ module teleswap::lockerstorage {
     /// @param ctx Transaction context
     public fun unpause_locker(admin_cap: &LockerAdminCap, locker_cap: &mut LockerCap, ctx: &TxContext) {
         assert_admin(admin_cap, locker_cap, ctx);
+        assert!(locker_cap.paused, ERROR_IS_UNPAUSED);
         locker_cap.paused = false;
         event::emit(LockerUnpausedEvent {
             unpaused_by: tx_context::sender(ctx),
@@ -869,6 +861,7 @@ module teleswap::lockerstorage {
     /// @param locker_target_address The target address
     /// @return Reference to the locker
     public fun get_locker_from_mapping(locker_cap: &LockerCap, locker_target_address: address): &Locker {
+        assert!(table::contains(&locker_cap.lockers_mapping, locker_target_address), ERROR_NOT_REQUESTED);
         table::borrow(&locker_cap.lockers_mapping, locker_target_address)
     }
 
@@ -876,7 +869,7 @@ module teleswap::lockerstorage {
     /// @param locker_cap The locker capability object
     /// @param locker_target_address The target address
     /// @return Mutable reference to the locker
-    public fun get_mut_locker_from_mapping(locker_cap: &mut LockerCap, locker_target_address: address): &mut Locker {
+    public(package) fun get_mut_locker_from_mapping(locker_cap: &mut LockerCap, locker_target_address: address): &mut Locker {
         table::borrow_mut(&mut locker_cap.lockers_mapping, locker_target_address)
     }
 

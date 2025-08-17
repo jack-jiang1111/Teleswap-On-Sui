@@ -1,31 +1,26 @@
-#[allow(unused_field, unused_variable, unused_const, unused_use,lint(self_transfer))]
+#[allow(unused_field,lint(self_transfer))]
 module teleswap::lockermanager {
 
     // Import from storage and helper
-    use teleswap::lockerstorage::{Self, LockerCap, Locker, LockersLibConstants, LockerAdminCap};
+    use teleswap::lockerstorage::{Self, LockerCap, LockerAdminCap};
     use teleswap::lockerhelper::{Self};
     use teleswap::telebtc::{Self, TELEBTC, TeleBTCCap};
     use sui::coin::{Self, Coin, TreasuryCap};
-    use sui::event;
+    use teleswap::wbtc::WBTC;
 
     // Error constants
-    const ERROR_ZERO_ADDRESS: u64 = 1;
-    const ERROR_ZERO_VALUE: u64 = 2;
-    const ERROR_NOT_BURNER: u64 = 3;
-    const ERROR_NOT_MINTER: u64 = 4;
-    const ERROR_NOT_LOCKER: u64 = 5;
-    const ERROR_TRANSFER_FAILED: u64 = 6;
-    const ERROR_LOCKER_ACTIVE: u64 = 7;
-    const ERROR_LOCKER_NOT_ACTIVE: u64 = 8;
-    const ERROR_INVALID_VALUE: u64 = 9;
-    const ERROR_ALREADY_HAS_ROLE: u64 = 10;
-    const ERROR_NOT_REQUESTED: u64 = 11;
-    const ERROR_BURN_FAILED: u64 = 12;
-    const ERROR_INSUFFICIENT_FUNDS: u64 = 13;
-    const ERROR_ALREADY_REQUESTED: u64 = 14;
-    const ERROR_MORE_THAN_MAX_REMOVABLE_COLLATERAL: u64 = 15;
+    const ERROR_ZERO_ADDRESS: u64 = 510;
+    const ERROR_ZERO_VALUE: u64 = 511;
+    const ERROR_NOT_LOCKER: u64 = 512;
+    const ERROR_LOCKER_ACTIVE: u64 = 513;
+    const ERROR_INVALID_VALUE: u64 = 514;
+    const ERROR_NOT_REQUESTED: u64 = 515;
+    const ERROR_BURN_FAILED: u64 = 516;
+    const ERROR_INSUFFICIENT_FUNDS: u64 = 517;
+    const ERROR_ALREADY_REQUESTED: u64 = 518;
+    const ERROR_MORE_THAN_MAX_REMOVABLE_COLLATERAL: u64 = 519;
 
-    const WBTC_ADDRESS: address = @0xaafb102dd0902f5055cadecd687fb5b71ca82ef0e0285d90afde828ec58ca96b;
+    const WBTC_ADDRESS: address = @wbtc;
     /// @notice Submit request to become Locker
     /// @dev This request may be approved by the owner. Users provide WBTC collateral and locking script.
     /// @param locker_cap The locker capability object
@@ -38,7 +33,7 @@ module teleswap::lockermanager {
     public fun request_to_become_locker(
         locker_cap: &mut LockerCap,
         _locker_locking_script: vector<u8>,
-        wbtc_coins: Coin<lockerstorage::WBTC>,
+        wbtc_coins: Coin<WBTC>,
         _locker_script_type: u8,
         _locker_rescue_script: vector<u8>,
         ctx: &mut TxContext
@@ -66,9 +61,6 @@ module teleswap::lockermanager {
         // Add WBTC coins to the vault
         lockerstorage::add_wbtc_collateral_to_contract(locker_cap, wbtc_coins);
 
-        // Increment total number of candidates by one
-        lockerstorage::increment_total_candidates(locker_cap);
-
         // Emit request to become locker event
         lockerstorage::emit_request_add_locker_event(
             sender,
@@ -92,7 +84,7 @@ module teleswap::lockermanager {
         let sender = tx_context::sender(ctx);
         
         // Check if sender has requested to become a locker
-        let locker_request = lockerstorage::get_mut_locker_from_mapping(locker_cap, sender);
+        let locker_request = lockerstorage::get_locker_from_mapping(locker_cap, sender);
         assert!(lockerstorage::is_locker_candidate(locker_request), ERROR_NOT_REQUESTED);
         
         // Get locker information before removing
@@ -384,7 +376,7 @@ module teleswap::lockermanager {
     public fun add_collateral(
         locker_cap: &mut LockerCap,
         _locker_target_address: address,
-        wbtc_coins: Coin<lockerstorage::WBTC>,
+        wbtc_coins: Coin<WBTC>,
         ctx: &mut TxContext
     ): bool {
         // Check if locker target address is not zero

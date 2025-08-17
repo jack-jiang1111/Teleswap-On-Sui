@@ -253,6 +253,7 @@ export async function splitGasTokens(client: SuiClient, deployer: any, recipient
             showEvents: true
         }
     });
+
     console.log(`Transferred ${amount} gas tokens to ${recipient}`);
     return result;
 }

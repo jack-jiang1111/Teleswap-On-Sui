@@ -4,7 +4,6 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { beforeAll, describe, expect, test, it } from "vitest";
 import { CCTransferFactory } from "./test_factory/cc_transfer_factory";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
-import { BigNumber } from "bignumber.js";
 import { getActiveKeypair } from "../scripts/sui.utils";
 import { callMoveFunction, pure, object } from "./utils/move-helper";
 import { hexToBytes,printEvents } from './utils/utils';

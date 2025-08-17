@@ -47,10 +47,9 @@ module teleswap::burn_router_locker_connector {
     const EINVALID_LOCKER: u64 = 231;
     const EALREADY_INITIALIZED: u64 = 232;
     const EINVALID_BTCRELAY: u64 = 233;
-    const ERROR_ZERO_VALUE: u64 = 1;
-    const ERROR_INSUFFICIENT_FUNDS: u64 = 2;
-    const ERROR_BURN_FAILED: u64 = 13;
     const ERROR_IS_PAUSED: u64 = 234;
+    const ERROR_INSUFFICIENT_FUNDS: u64 = 235;
+    const ERROR_BURN_FAILED: u64 = 236;
 
     // ===== EVENTS =====
     public struct NewUnwrap has copy, drop {

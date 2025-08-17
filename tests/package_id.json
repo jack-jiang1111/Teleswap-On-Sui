@@ -1,12 +1,12 @@
 {
-  "burnRouterPackageId": "0x30373026e8725c4aff10cf282364efef1045e252b4238fed23a01eae3021899a",
-  "burnRouterAdminId": "0x01fe28804a5dd0d71dcb05800e9c2f45e6c64a9e0a77138da8806b178b02b141",
-  "telebtcCapId": "0x8aaa210562c168e4965636f76310206007aee23a7769ce7e6158d6f4430722f8",
-  "telebtcTreasuryCapId": "0xfce20c8767c70465aa4fbff586845567ddb1db50d1428d4dad8648eec8703e95",
-  "telebtcAdminId": "0xb3640e8186635a96e1e48f248d45bc05550c525bf6c5e4260c4338d9690109ee",
-  "btcrelayPackageId": "0x5dc77860630b342ab704482f11ccd474b7c519e14764cafd5c1369aaa98ef328",
-  "btcrelayCapId": "0xe3774c48ac410e10727b72ac50601d14d6e9d31353f070cc6c8f0c74791b08f5",
-  "btcrelayAdminId": "0xbff18a7e30cad95dcfe3e5feee8fdeff88b05f17ff5f5ac8c8e9619978a5ca7a",
-  "burnRouterId": "0xa7e3f4d6aead84473a4fe0c9ecf17ff179f3ad7c1435dd1bef9f1d133f24af1a",
-  "dummyLockerCapId": "0x28be4147b663d892ea238b70cc087da980e8681873047b24c6b9e224341410e3"
+  "burnRouterPackageId": "0xb46f1178535fc8922da8d00c72bf95ee42b37579d5c86665ffb9a9f4dff68067",
+  "burnRouterAdminId": "0x60d645970f0efe0556befc58aa4f68c50106e54e63445ef23731cb9a32082b06",
+  "telebtcCapId": "0x204ca93d541ec944e7f2ba8c90e60619135d8ef3d167aa106382824bba27f66b",
+  "telebtcTreasuryCapId": "0x3457143b4d3746d477feb8d4a3943d6e6cc26529406b7f49f006b58cdec98fe0",
+  "telebtcAdminId": "0xb3d9553cb62a3b9dcfad6bbdc80bbdad1e0b1ab7dde326e4e863cb06417ed49b",
+  "btcrelayPackageId": "0x12088df1f665e0cd67a8a41103a15fb1401a224b3e8bf059ed8030e42d3f692e",
+  "btcrelayCapId": "0xaccd6cf666d6af52645a2d6e900031106e4cd86eebd17e5fad35da4df9a173ea",
+  "btcrelayAdminId": "0x804de59ff6ae25ee253c3ee5335d4c3b58ae57ff1ec45f1f6497a91accfc107e",
+  "burnRouterId": "0x7b7b5c0dd4f6d0a78645e39a6b665ff84db7710727dbcf848401fba824856733",
+  "dummyLockerCapId": "0x0133029d6f08f5e0872a807e558fc8d76cad333f9026d40ef7f1ba3675770519"
 }

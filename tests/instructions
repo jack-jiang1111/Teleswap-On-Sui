@@ -1,0 +1,41 @@
+Your next project is transfer solidity test into move test. (refer to lockersol.test.ts in sol folder)
+And process all the test. This is a huge project, so we are going to do it step by step.
+
+
+3. start to migratie test from lockersol.test.ts to the move test version.
+for those involve tst or contract address, we can just ignore it since we use different structure than solidity.
+only move one describe each time, stop for review after each describe
+
+when start a new describe, comment the previous describe, for faster running
+a few notes: before call any move function, use await new promise(1000) (just wait 1 sec before processing, since block need some time to digest the last tx )
+for any move call, refer to the helper method, you can directly call 
+the result can be either success or fail
+you can use this line to expect success or fail: expect(result.effects?.status?.status).toBe('success');
+you can use this line the check the return result: result?.results?.[0]?.returnValues?.[0]?.[0][0]
+(the only works with the return value is a simple item like a number or bool, and you should set the retunValue flag to be true when expected a return value)
+
+some error will throw in the call function, like someone is trying to call a function with an object not owned by himself, like call a admin function with the admin object
+in such case, you call use this kind of code to assert fail:
+it("non owners can't call setLockerPercentageFee", async () => {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            try{
+                    // Set locker percentage fee as admin
+                let result = await callMoveFunction({
+                    packageId: lockerPackageId,
+                    moduleName: "lockerstorage",
+                    functionName: "set_locker_percentage_fee",
+                    arguments: [object(lockerAdminCapId), object(lockerCapId), pure(2100)],
+                    signer: signer1
+                });
+                expect(true).toBe(false);
+            }catch(error){
+                expect(error).toBeDefined();
+            }
+});
+
+all the hex value need to call hex to byte before passing into the function. since move only accpect vec<u8> an array of bytes
+
+
+
+
+

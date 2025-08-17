@@ -1,4 +1,4 @@
-#[allow(unused_field, unused_variable, unused_const, unused_use)]
+#[allow(unused_field, unused_variable, unused_use)]
 module teleswap::lockerhelper {
 
     // Import from storage
@@ -17,19 +17,14 @@ module teleswap::lockerhelper {
 
 
     // Error constants
-    const ERROR_NOT_BURN_ROUTER: u64 = 1;
-    const ERROR_ZERO_VALUE: u64 = 2;
-    const ERROR_ZERO_ADDRESS: u64 = 3;
-    const ERROR_NOT_LOCKER: u64 = 4;
-    const ERROR_NOT_CANDIDATE: u64 = 5;
-    const ERROR_ALREADY_LOCKER: u64 = 6;
-    const ERROR_ALREADY_CANDIDATE: u64 = 7;
-    const ERROR_INSUFFICIENT_FUNDS: u64 = 8;
-    const ERROR_HEALTH_LOCKER: u64 = 9;
-    const ERROR_MORE_THAN_MAX_REMOVABLE_COLLATERAL: u64 = 10;
-    const ERROR_INVALID_VALUE: u64 = 11;
-    const ERROR_ALREADY_IN_QUEUE: u64 = 12;
-    const ERROR_BURN_FAILED: u64 = 13;
+    const ERROR_ZERO_VALUE: u64 = 520;
+    const ERROR_ZERO_ADDRESS: u64 = 521;
+    const ERROR_NOT_LOCKER: u64 = 522;
+    const ERROR_ALREADY_LOCKER: u64 = 523;
+    const ERROR_ALREADY_CANDIDATE: u64 = 524;
+    const ERROR_INSUFFICIENT_FUNDS: u64 = 525;
+    const ERROR_HEALTH_LOCKER: u64 = 526;
+    const ERROR_ALREADY_IN_QUEUE: u64 = 527;
     // Helper functions from lockerlib.sol
     /// @notice Helper function to request to become a locker
     /// @dev This function handles the core logic for creating a locker candidate. Validates inputs and creates the locker object.
