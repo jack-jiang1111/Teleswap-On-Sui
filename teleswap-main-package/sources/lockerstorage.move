@@ -39,7 +39,7 @@ module teleswap::lockerstorage {
     const ERROR_INVALID_GET: u64 = 506;
     const ERROR_IS_PAUSED: u64 = 507;
     const ERROR_IS_UNPAUSED: u64 = 508;
-    const ERROR_NOT_REQUESTED: u64 = 515;
+    const ERROR_NOT_LOCKER: u64 = 512;
 
     // ============================================================================
     // STRUCTS
@@ -586,6 +586,10 @@ module teleswap::lockerstorage {
         locker_target_address: address,
         timestamp: u64
     ) {
+        // Update the locker collateral token mapping (overwrites if key exists)
+        if (table::contains(&locker_cap.locker_inactivation_timestamp, locker_target_address)) {
+            table::remove(&mut locker_cap.locker_inactivation_timestamp, locker_target_address);
+        };
         table::add(&mut locker_cap.locker_inactivation_timestamp, locker_target_address, timestamp);
     }
 
@@ -861,7 +865,7 @@ module teleswap::lockerstorage {
     /// @param locker_target_address The target address
     /// @return Reference to the locker
     public fun get_locker_from_mapping(locker_cap: &LockerCap, locker_target_address: address): &Locker {
-        assert!(table::contains(&locker_cap.lockers_mapping, locker_target_address), ERROR_NOT_REQUESTED);
+        assert!(table::contains(&locker_cap.lockers_mapping, locker_target_address), ERROR_NOT_LOCKER);
         table::borrow(&locker_cap.lockers_mapping, locker_target_address)
     }
 
@@ -870,6 +874,7 @@ module teleswap::lockerstorage {
     /// @param locker_target_address The target address
     /// @return Mutable reference to the locker
     public(package) fun get_mut_locker_from_mapping(locker_cap: &mut LockerCap, locker_target_address: address): &mut Locker {
+        assert!(table::contains(&locker_cap.lockers_mapping, locker_target_address), ERROR_NOT_LOCKER);
         table::borrow_mut(&mut locker_cap.lockers_mapping, locker_target_address)
     }
 

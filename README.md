@@ -107,15 +107,18 @@ MIT
   (6) locker contract testing
   (8) exchange contract
   (9) exchange contract testing
+  (9.5) swap and unwrap function in burn router and testing
   (10) overall testing with mock wbtc and mock btcrelay
   (11) deployer script
 
-Other TODO:
+Other TODOs:
 -- Need to update deploy script due to directory messed up (will do after all the contracts done)
 -- Telebtc test rewrite due to telebtc restructure (will do after locker contract)
 -- fix tests (after locker contract)
 -- "swap and burn" in burn router will be finished after the exchange contract
 -- Error code re orgnize
+-- safe math rescan all files
+-- reentrancy issue rescan
 -- BURN and distribute fee should call burn instead, put the burn logic in the connector
--- type mismatch
+-- check inactiveation and active logic from source code, how to handle zero??
 

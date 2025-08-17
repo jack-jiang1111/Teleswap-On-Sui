@@ -148,6 +148,8 @@ module teleswap::lockermanager {
         // Check if reliability factor is not zero
         assert!(_locker_reliability_factor != 0, ERROR_ZERO_VALUE);
         
+
+        lockerstorage::set_locker_inactivation_timestamp(locker_cap, _locker_target_address, 0);
         // Check if the address has requested to become a locker
         let the_locker = lockerstorage::get_mut_locker_from_mapping(locker_cap, _locker_target_address);
         assert!(lockerstorage::is_locker_candidate(the_locker), ERROR_NOT_REQUESTED);
@@ -155,6 +157,7 @@ module teleswap::lockermanager {
         // Update locker status
         lockerstorage::set_locker_candidate_status(the_locker, false);
         lockerstorage::set_locker_status(the_locker, true);
+        
         
         // Get information from the_locker before releasing the borrow
         let locker_locking_script = lockerstorage::get_locker_locking_script(the_locker);
@@ -219,7 +222,7 @@ module teleswap::lockermanager {
         // Now we can use locker_cap again since we've extracted what we need from the_locker
         // Check if inactivation is not already requested
         let current_inactivation_timestamp = lockerstorage::get_locker_inactivation_timestamp(locker_cap, sender);
-        assert!(current_inactivation_timestamp == 0, ERROR_ALREADY_REQUESTED);
+        assert!(current_inactivation_timestamp != 0, ERROR_ALREADY_REQUESTED);
         
         // Set the inactivation timestamp (current epoch + INACTIVATION_DELAY)
         let current_epoch = tx_context::epoch(ctx);
@@ -263,6 +266,9 @@ module teleswap::lockermanager {
         let collateral_amount = lockerstorage::get_collateral_token_locked_amount(the_locker);
         let net_minted = lockerstorage::get_locker_net_minted(the_locker);
         
+        let current_inactivation_timestamp = lockerstorage::get_locker_inactivation_timestamp(locker_cap, sender);
+        assert!(current_inactivation_timestamp == 0, ERROR_ALREADY_REQUESTED);
+        
         // Clear the inactivation timestamp (set to 0)
         lockerstorage::set_locker_inactivation_timestamp(locker_cap, sender, 0);
         
@@ -296,7 +302,7 @@ module teleswap::lockermanager {
         locker_cap: &mut LockerCap,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
-        telebtc_coins: Coin<TELEBTC>,
+        telebtc_coins: &mut Option<Coin<TELEBTC>>,
         ctx: &mut TxContext
     ): bool {
         let sender = tx_context::sender(ctx);
@@ -318,13 +324,18 @@ module teleswap::lockermanager {
         // Check if locker is not active (must be inactivated first)
         assert!(!lockerstorage::is_locker_active(locker_cap, sender, ctx), ERROR_LOCKER_ACTIVE);
         
-        // Check that provided TeleBTC coins match net minted amount
-        let provided_telebtc = coin::value(&telebtc_coins);
-        assert!(provided_telebtc == net_minted, ERROR_INSUFFICIENT_FUNDS);
-        
-        // Burn the TeleBTC coins
-        let burn_success = telebtc::burn(telebtc_cap, treasury_cap, telebtc_coins, ctx);
-        assert!(burn_success, ERROR_BURN_FAILED);
+        if (option::is_none(telebtc_coins)) {
+            assert!(net_minted == 0, ERROR_INSUFFICIENT_FUNDS);
+        } else {
+            // Check that provided TeleBTC coins match net minted amount
+            let telebtc_coin = option::extract(telebtc_coins);
+            let provided_telebtc = coin::value(&telebtc_coin);
+            assert!(provided_telebtc == net_minted, ERROR_INSUFFICIENT_FUNDS);
+            
+            // Burn the TeleBTC coins
+            let burn_success = telebtc::burn(telebtc_cap, treasury_cap, telebtc_coin, ctx);
+            assert!(burn_success, ERROR_BURN_FAILED);
+        };
         
         // Check that slashing amount is 0
         assert!(slashing_telebtc_amount == 0, ERROR_INVALID_VALUE);
