@@ -1,13 +1,13 @@
 #[allow(unused_use,unused_variable,unused_const,unused_mut_parameter,unused_field)]
-module teleswap::burn_router_logic_mock {
+module teleswap::burn_router_logic {
     use sui::table::{Self, Table};
-    use teleswap::burn_router_storage_mock::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
-    use teleswap::burn_router_helper_mock::{Self};
-    use btcrelay::bitcoin_helper::{Self};    
-    use btcrelay::btcrelay_mock::{Self,BTCRelay};
-    use teleswap::telebtc_mock::{Self, TeleBTCCap, TELEBTC_MOCK};
+    use teleswap::burn_router_storage::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
+    use teleswap::burn_router_helper::{Self};
+    use teleswap::bitcoin_helper::{Self};    
+    use teleswap::btcrelay::{Self,BTCRelay};
+    use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
     use sui::coin::{Self, Coin, TreasuryCap};
-    use teleswap::dummy_locker::{Self, DummyLockerCap};
+    use teleswap::lockerstorage::{Self, LockerCap};
     use sui::event;
     
     // ===== CONSTANTS =====
@@ -81,7 +81,7 @@ module teleswap::burn_router_logic_mock {
     /// @notice Initializes the admin object for the burn router contract.
     /// @dev Should be called once at deployment to set up admin privileges.
     fun init(ctx: &mut TxContext){
-        let admin = burn_router_storage_mock::create_burn_router_admin(ctx);
+        let admin = burn_router_storage::create_burn_router_admin(ctx);
         transfer::public_transfer(admin, tx_context::sender(ctx));
     }
 
@@ -112,8 +112,8 @@ module teleswap::burn_router_logic_mock {
         ctx: &mut TxContext
     ) {
         // Only allow initialization once, and set initialized in storage
-        let owner = burn_router_storage_mock::do_initialize(burn_admin);
-        let burn_router = burn_router_storage_mock::create_burn_router(
+        let owner = burn_router_storage::do_initialize(burn_admin);
+        let burn_router = burn_router_storage::create_burn_router(
             owner,
             starting_block_number,
             transfer_deadline,
@@ -145,30 +145,30 @@ module teleswap::burn_router_logic_mock {
     /// @return The amount of BTC the user will receive
     public fun unwrap(
         burn_router: &mut BurnRouter,
-        amount_coin: Coin<TELEBTC_MOCK>,
+        amount_coin: Coin<TELEBTC>,
         user_script: vector<u8>,
         script_type: u8,
         locker_locking_script: vector<u8>,
         third_party: u64,
         telebtc_cap: &mut TeleBTCCap,
-        treasury_cap:  &mut TreasuryCap<TELEBTC_MOCK>,
+        treasury_cap:  &mut TreasuryCap<TELEBTC>,
         btcrelay: &BTCRelay,
-        locker_cap: &mut DummyLockerCap,
+        locker_cap: &mut LockerCap,
         ctx: &mut TxContext
     ): u64 {
         // Validate that the provided BTCRelay is the legitimate one
         assert!(
-            burn_router_storage_mock::validate_btcrelay(burn_router, btcrelay),
+            burn_router_storage::validate_btcrelay(burn_router, btcrelay),
             EINVALID_BTCRELAY
         );
 
         // Extract amount from coin
         let amount = coin::value(&amount_coin);
-        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
 
         
         // Check validity of user script
-        burn_router_helper_mock::check_script_type_and_locker(
+        burn_router_helper::check_script_type_and_locker(
             user_script,
             script_type,
             locker_locking_script,
@@ -187,13 +187,13 @@ module teleswap::burn_router_logic_mock {
         );
 
         // Save burn request
-        let request_id = burn_router_storage_mock::save_burn_request(
+        let request_id = burn_router_storage::save_burn_request(
             burn_router,
             amount,
             remaining_amount,
             user_script,
             script_type,
-            btcrelay_mock::lastSubmittedHeight(btcrelay),
+            btcrelay::lastSubmittedHeight(btcrelay),
             locker_target_address,
             ctx.sender(),
         );
@@ -217,7 +217,7 @@ module teleswap::burn_router_logic_mock {
             locker_target_address,
             sender: ctx.sender(),
             request_id,
-            deadline: btcrelay_mock::lastSubmittedHeight(btcrelay) + burn_router_storage_mock::get_transfer_deadline(burn_router),
+            deadline: btcrelay::lastSubmittedHeight(btcrelay) + burn_router_storage::get_transfer_deadline(burn_router),
             third_party,
             amounts,
             fees,
@@ -291,17 +291,17 @@ module teleswap::burn_router_logic_mock {
         locker_locking_script: vector<u8>,
         burn_req_indexes: vector<u64>,
         vout_indexes: vector<u64>,
-        locker_cap: &mut DummyLockerCap,
+        locker_cap: &mut LockerCap,
         ctx: &mut TxContext,
     ): bool {
         // Validate that the provided BTCRelay is the legitimate one
         assert!(
-            burn_router_storage_mock::validate_btcrelay(burn_router, btcrelay),
+            burn_router_storage::validate_btcrelay(burn_router, btcrelay),
             EINVALID_BTCRELAY
         );
 
         // Get the Locker target address
-        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
         
         // Validate caller is locker or oracle
         let caller = ctx.sender();
@@ -312,9 +312,9 @@ module teleswap::burn_router_logic_mock {
         // we can design a cap to verify the caller is the locker
 
         // Call burn_proof_helper 
-        burn_router_helper_mock::burn_proof_helper(
+        burn_router_helper::burn_proof_helper(
             block_number,
-            burn_router_storage_mock::get_starting_block_number(burn_router),
+            burn_router_storage::get_starting_block_number(burn_router),
             locktime,
             locker_locking_script,
             vector::length(&burn_req_indexes),
@@ -327,7 +327,7 @@ module teleswap::burn_router_logic_mock {
         
         // Check transaction confirmation
         assert!(
-            btcrelay_mock::checkTxProof(
+            btcrelay::checkTxProof(
                 btcrelay,
                 tx_id,
                 block_number,
@@ -338,7 +338,7 @@ module teleswap::burn_router_logic_mock {
         );
 
         // Mark the burn requests that are paid by this transaction
-        let paid_output_counter = burn_router_helper_mock::check_paid_burn_requests(
+        let paid_output_counter = burn_router_helper::check_paid_burn_requests(
             burn_router,
             tx_id,
             block_number,
@@ -350,8 +350,8 @@ module teleswap::burn_router_logic_mock {
 
 
         // Mark the Bitcoin tx as used for burn proof so Locker cannot use it again
-        let is_used = burn_router_helper_mock::update_is_used_as_burn_proof(
-            burn_router_storage_mock::get_is_used_as_burn_proof_mut(burn_router),
+        let is_used = burn_router_helper::update_is_used_as_burn_proof(
+            burn_router_storage::get_is_used_as_burn_proof_mut(burn_router),
             paid_output_counter,
             &vout,
             &locker_locking_script,
@@ -380,22 +380,22 @@ module teleswap::burn_router_logic_mock {
         btcrelay: &BTCRelay,
         locker_locking_script: vector<u8>,
         indices: vector<u64>,
-        locker_cap: &mut DummyLockerCap,
+        locker_cap: &mut LockerCap,
         ctx: &mut TxContext
     ) {
-        burn_router_storage_mock::assert_admin(tx_context::sender(ctx), burn_router);
+        burn_router_storage::assert_admin(tx_context::sender(ctx), burn_router);
         // Check if the locking script is valid
-        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), EINVALID_LOCKER);
+        assert!(lockerstorage::is_locker_mock(locker_locking_script,locker_cap), EINVALID_LOCKER);
 
         // Get the target address of the locker from its locking script
-        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
 
         let len = vector::length(&indices);
         let mut i = 0u64;
         while (i < len) {
             let idx = *vector::borrow(&indices, i);
             // Call helper to process dispute 
-            burn_router_helper_mock::dispute_burn_helper(
+            burn_router_helper::dispute_burn_helper(
                 burn_router,
                 btcrelay,
                 locker_target_address,
@@ -403,16 +403,16 @@ module teleswap::burn_router_logic_mock {
             );
 
             // Get the burn request
-            let request = burn_router_storage_mock::get_burn_request(
+            let request = burn_router_storage::get_burn_request(
                 burn_router,
                 locker_target_address,
                 idx
             );
-            let amount = burn_router_storage_mock::get_amount(&request);
-            let sender = burn_router_storage_mock::get_sender(&request);
+            let amount = burn_router_storage::get_amount(&request);
+            let sender = burn_router_storage::get_sender(&request);
 
             // Call dummy locker slashing 
-            dummy_locker::slash_idle_locker(
+            lockerstorage::slash_idle_locker_mock(
                 locker_target_address,
                 amount, // slasher reward 
                 tx_context::sender(ctx), // slasher address
@@ -426,7 +426,7 @@ module teleswap::burn_router_logic_mock {
                 user: sender,
                 locker: locker_target_address,
                 locker_locking_script: locker_locking_script,
-                request_id_of_locker: burn_router_storage_mock::get_request_id_of_locker(&request)
+                request_id_of_locker: burn_router_storage::get_request_id_of_locker(&request)
             };
             event::emit(event);
             i = i + 1;
@@ -463,10 +463,10 @@ module teleswap::burn_router_logic_mock {
         locktimes: vector<vector<u8>>, // [inputTxLocktime, outputTxLocktime]
         input_intermediate_nodes: vector<u8>,
         indexes_and_block_numbers: vector<u64>, // [inputIndex, inputTxIndex, inputTxBlockNumber]
-        locker_cap: &mut DummyLockerCap,
+        locker_cap: &mut LockerCap,
         ctx: &mut TxContext
     ) {
-        burn_router_storage_mock::assert_admin(tx_context::sender(ctx), burn_router);
+        burn_router_storage::assert_admin(tx_context::sender(ctx), burn_router);
         // 1. Calculate input tx id
         let input_tx_id = bitcoin_helper::calculate_tx_id(
             *vector::borrow(&versions, 0),
@@ -480,7 +480,7 @@ module teleswap::burn_router_logic_mock {
         vector::push_back(&mut input_output_vin_vout, input_vin);
         vector::push_back(&mut input_output_vin_vout, output_vin);
         vector::push_back(&mut input_output_vin_vout, output_vout);
-        burn_router_helper_mock::dispute_and_slash_locker_helper(
+        burn_router_helper::dispute_and_slash_locker_helper(
             locker_locking_script,
             versions,
             input_output_vin_vout,
@@ -525,25 +525,25 @@ module teleswap::burn_router_logic_mock {
     /// @return (remaining_amount, protocol_fee, third_party_fee, locker_fee)
     fun burn_and_distribute_fees(
         burn_router: &mut BurnRouter,
-        amount_coin: Coin<TELEBTC_MOCK>,
+        amount_coin: Coin<TELEBTC>,
         locker_locking_script: vector<u8>,
         third_party: u64,
         telebtc_cap: &mut TeleBTCCap,
-        treasury_cap: &mut TreasuryCap<TELEBTC_MOCK>,
+        treasury_cap: &mut TreasuryCap<TELEBTC>,
         ctx: &mut TxContext,
-        locker_cap: &mut DummyLockerCap
+        locker_cap: &mut LockerCap
     ): (u64, u64, u64, u64) {
         // Calculate fees
         let amount = coin::value(&amount_coin);
-        let protocol_fee = (amount * burn_router_storage_mock::get_protocol_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
-        let third_party_fee = (amount * burn_router_storage_mock::get_third_party_fee(burn_router, third_party)) / MAX_PERCENTAGE_FEE;
-        let locker_fee = (amount * burn_router_storage_mock::get_locker_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
-        let bitcoin_fee = burn_router_storage_mock::get_bitcoin_fee(burn_router);
+        let protocol_fee = (amount * burn_router_storage::get_protocol_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let third_party_fee = (amount * burn_router_storage::get_third_party_fee(burn_router, third_party)) / MAX_PERCENTAGE_FEE;
+        let locker_fee = (amount * burn_router_storage::get_locker_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let bitcoin_fee = burn_router_storage::get_bitcoin_fee(burn_router);
         let combined_locker_fee = locker_fee + bitcoin_fee;
         assert!(amount  > DUST_SATOSHI_AMOUNT + protocol_fee + third_party_fee + combined_locker_fee, ELOW_FEE); // handle negative number use this trick
         let remained_amount = amount - protocol_fee - third_party_fee - combined_locker_fee;
         
-        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
 
         // Start with the amount coin and split for each fee
         let mut coins = amount_coin;
@@ -551,12 +551,12 @@ module teleswap::burn_router_logic_mock {
         // Distribute fees to respective parties
         if (protocol_fee > 0) {
             let fee_coins = coin::split(&mut coins, protocol_fee, ctx);
-            transfer::public_transfer(fee_coins, burn_router_storage_mock::get_treasury(burn_router));
+            transfer::public_transfer(fee_coins, burn_router_storage::get_treasury(burn_router));
         };
 
         if (third_party_fee > 0) {
             let fee_coins = coin::split(&mut coins, third_party_fee, ctx);
-            transfer::public_transfer(fee_coins, burn_router_storage_mock::get_third_party_address(burn_router, third_party));
+            transfer::public_transfer(fee_coins, burn_router_storage::get_third_party_address(burn_router, third_party));
         };
 
         if (combined_locker_fee > 0) {
@@ -565,7 +565,7 @@ module teleswap::burn_router_logic_mock {
         };
 
         // Burn remaining coins using dummy_locker
-        dummy_locker::burn(locker_locking_script, coins, telebtc_cap, treasury_cap, ctx, locker_cap);
+        lockerstorage::burn_mock(locker_locking_script, coins, telebtc_cap, treasury_cap, ctx, locker_cap);
 
         // Return fee details
         (remained_amount, protocol_fee, third_party_fee, combined_locker_fee)
@@ -589,15 +589,15 @@ module teleswap::burn_router_logic_mock {
         input_tx_id: vector<u8>,
         input_block_number: u64,
         ctx: &mut TxContext,
-        locker_cap: &mut DummyLockerCap
+        locker_cap: &mut LockerCap
     ) {
-        let (locker_target_address, slasher_reward, total_value) = burn_router_helper_mock::prepare_slash_locker_for_dispute(
+        let (locker_target_address, slasher_reward, total_value) = burn_router_helper::prepare_slash_locker_for_dispute(
             burn_router,
             input_vout,
             locker_locking_script,
             locker_cap
         );
-        dummy_locker::slash_thief_locker(
+        lockerstorage::slash_thief_locker_mock(
             locker_target_address,
             slasher_reward,
             tx_context::sender(ctx),

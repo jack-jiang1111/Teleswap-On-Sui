@@ -10,7 +10,7 @@ module teleswap::lockercore {
     // Import burn router and related modules
     // Note: Burn router functionality moved to lockerhelper to avoid circular dependencies
     use teleswap::burn_router_storage::{BurnRouter};
-    use btcrelay::btcrelay::{BTCRelay};
+    use teleswap::btcrelay::{BTCRelay};
     use teleswap::burn_router_locker_connector::{Self};
     // Import Sui modules
     use sui::coin::{Self, Coin, TreasuryCap};
@@ -21,9 +21,16 @@ module teleswap::lockercore {
     const ERROR_BURN_FAILED: u64 = 532;
     const ERROR_INSUFFICIENT_FUNDS: u64 = 533;
     const ERROR_IS_PAUSED: u64 = 534;
+    const ERROR_NOT_LOCKER: u64 = 535;
 
 
-
+public struct DebugEvent has copy, drop {
+        num1: u256,
+        num2: u256,
+        num3: u256,
+        num4: u256,
+        num5: u256,
+    }
     /// @notice Mints TeleBTC tokens will only be called by the cctransfer contract
     /// @param _locker_locking_script Locker locking script
     /// @param _amount Amount to mint
@@ -33,9 +40,9 @@ module teleswap::lockercore {
     /// @param _receiver Address to receive the minted tokens
     /// @param ctx Transaction context
     /// @return (Coin<TELEBTC>, address) - minted coins and locker address
-    public(package) fun mint(
+    public fun mint(
         _locker_locking_script: vector<u8>,
-        _amount: u64,
+        _amount: u256,
         locker_cap: &mut LockerCap,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
@@ -60,7 +67,7 @@ module teleswap::lockercore {
         );
         
         // Mint TeleBTC using the telebtc module
-        let coins = telebtc::mint(telebtc_cap, treasury_cap, _receiver, _amount, ctx);
+        let coins = telebtc::mint(telebtc_cap, treasury_cap, _receiver, _amount as u64, ctx);
         
         // Emit mint event
         lockerstorage::emit_mint_by_locker_event(
@@ -77,14 +84,14 @@ module teleswap::lockercore {
     // Liquidation function (admin only)
     public fun liquidate_locker(
         _locker_target_address: address,
-        _collateral_amount: u64,
-        telebtc_coins: Coin<TELEBTC>,
+        _collateral_amount: u256,
+        mut telebtc_coins: Coin<TELEBTC>,
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
-        btcrelay: &BTCRelay,
-        burn_router: &mut BurnRouter,
+        btcrelay_cap: &BTCRelay,
+        burn_router_cap: &mut BurnRouter,
         ctx: &mut TxContext
     ): bool {
         // Check if system is paused
@@ -93,6 +100,8 @@ module teleswap::lockercore {
         // Check collateral amount is not zero
         assert!(_collateral_amount != 0, ERROR_ZERO_VALUE);
         
+        // check if the target address is a locker
+        assert!(lockerstorage::is_locker_by_address(locker_cap, _locker_target_address), ERROR_NOT_LOCKER);
         // Assert admin privileges
         lockerstorage::assert_admin(admin_cap, locker_cap, ctx);
         
@@ -106,7 +115,7 @@ module teleswap::lockercore {
             reliability_factor,
         );
         // Validate that provided TeleBTC coins are sufficient
-        let provided_telebtc = coin::value(&telebtc_coins);
+        let provided_telebtc = coin::value(&telebtc_coins) as u256;
         assert!(provided_telebtc >= needed_telebtc, ERROR_INSUFFICIENT_FUNDS);
         
         // Get locker's rescue script and script type for unwrap
@@ -118,22 +127,27 @@ module teleswap::lockercore {
         // Update locked collateral of locker
         let current_collateral = lockerstorage::get_collateral_token_locked_amount(the_locker);
         lockerstorage::set_collateral_token_locked_amount(the_locker, current_collateral - _collateral_amount);
+
+        // split the telebtc coins into. one for burning, the other return to the sender
+        let burn_coins = coin::split(&mut telebtc_coins, needed_telebtc as u64, ctx);
+        // send back extra telebtc coins 
+        transfer::public_transfer(telebtc_coins, tx_context::sender(ctx));
+        
         
         // Unwrap TeleBTC for locker rescue script using helper function
-        let remaining_amount = burn_router_locker_connector::unwrap(
-            burn_router,
-            telebtc_coins, 
+        burn_router_locker_connector::unwrap(
+            burn_router_cap,
+            burn_coins, 
             locker_rescue_script, 
             locker_script_type, 
             locker_locking_script, 
             0,
             telebtc_cap, 
             treasury_cap, 
-            btcrelay,
+            btcrelay_cap,
             locker_cap,
             ctx
         );
-        assert!(remaining_amount != 0, ERROR_BURN_FAILED);
         
         // Check if locker has sufficient collateral balance
         let locker_collateral_token_balance = lockerstorage::get_locker_collateral_token_balance(locker_cap, _locker_target_address);
@@ -164,7 +178,7 @@ module teleswap::lockercore {
     /// @return The amount of TeleBTC needed to buy the collateral
     public fun buy_slashed_collateral_of_locker(
         _locker_target_address: address,
-        _collateral_amount: u64,
+        _collateral_amount: u256,
         telebtc_coins: Coin<TELEBTC>,
         locker_cap: &mut LockerCap,
         telebtc_cap: &mut TeleBTCCap,
@@ -185,7 +199,7 @@ module teleswap::lockercore {
         );
         
         // Validate that provided TeleBTC coins are sufficient
-        let provided_telebtc = coin::value(&telebtc_coins);
+        let provided_telebtc = coin::value(&telebtc_coins) as u256;
         assert!(provided_telebtc >= needed_telebtc, ERROR_INSUFFICIENT_FUNDS);
         
         // Burn user's TeleBTC using telebtc module
@@ -218,7 +232,7 @@ module teleswap::lockercore {
 
     // Emergency functions only admin
     public fun emergency_withdraw(
-        _amount: u64,
+        _amount: u256,
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
         ctx: &mut TxContext

@@ -1,10 +1,10 @@
 #[allow(unused_field, unused_variable,unused_const,unused_use)]
-module teleswap::burn_router_helper_mock {
+module teleswap::burn_router_helper {
     use sui::table::{Self, Table};
-    use teleswap::burn_router_storage_mock::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
-    use teleswap::dummy_locker::{Self, DummyLockerCap};
-    use btcrelay::bitcoin_helper::{Self};
-    use btcrelay::btcrelay_mock::{Self,BTCRelay};
+    use teleswap::burn_router_storage::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
+    use teleswap::lockerstorage::{Self, LockerCap};
+    use teleswap::bitcoin_helper::{Self};
+    use teleswap::btcrelay::{Self,BTCRelay};
     
     // ===== CONSTANTS =====
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%
@@ -105,28 +105,28 @@ module teleswap::burn_router_helper_mock {
         locker_target_address: address,
         index: u64,
     ) {
-        let starting_block_number = burn_router_storage_mock::get_starting_block_number(burn_router);
-        let transfer_deadline = burn_router_storage_mock::get_transfer_deadline(burn_router);
+        let starting_block_number = burn_router_storage::get_starting_block_number(burn_router);
+        let transfer_deadline = burn_router_storage::get_transfer_deadline(burn_router);
         
         // Get the burn request
-        let request = burn_router_storage_mock::get_burn_request_mut(
+        let request = burn_router_storage::get_burn_request_mut(
             burn_router,
             locker_target_address,
             index
         );
 
         // Check that locker has not provided burn proof
-        assert!(!burn_router_storage_mock::is_transferred(request), EALREADY_PAID);
+        assert!(!burn_router_storage::is_transferred(request), EALREADY_PAID);
 
         // Check that payback deadline has passed
-        let deadline = burn_router_storage_mock::get_deadline(request);
-        assert!(deadline < btcrelay_mock::lastSubmittedHeight(btcrelay), EDEADLINE_NOT_PASSED);
+        let deadline = burn_router_storage::get_deadline(request);
+        assert!(deadline < btcrelay::lastSubmittedHeight(btcrelay), EDEADLINE_NOT_PASSED);
 
         // Check that request is not too old
         assert!(deadline > starting_block_number + transfer_deadline, EOLD_REQUEST);
 
         // Set is_transferred = true to prevent slashing the locker again
-        burn_router_storage_mock::set_is_transferred(request, true);
+        burn_router_storage::set_is_transferred(request, true);
     }
 
     /// @notice Disputes and slashes a malicious locker for a tx not matching any burn request.
@@ -150,23 +150,23 @@ module teleswap::burn_router_helper_mock {
         locktimes: vector<vector<u8>>, // [inputTxLocktime, outputTxLocktime]
         input_intermediate_nodes: vector<u8>,
         indexes_and_block_numbers: vector<u64>, // [inputIndex, inputTxIndex, inputTxBlockNumber]
-        locker_cap: & DummyLockerCap
+        locker_cap: & LockerCap
     ) {
         // 1. Check if the locking script is valid
-        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), ENOT_LOCKER);
+        assert!(lockerstorage::is_locker_mock(locker_locking_script,locker_cap), ENOT_LOCKER);
 
         // 2. Check input array sizes
         assert!(vector::length(&versions) == 2 && vector::length(&locktimes) == 2 && vector::length(&indexes_and_block_numbers) == 3, EWRONG_INPUTS);
 
         // 3. Check that request is not too old
-        let starting_block_number = burn_router_storage_mock::get_starting_block_number(burn_router);
-        let transfer_deadline = burn_router_storage_mock::get_transfer_deadline(burn_router);
+        let starting_block_number = burn_router_storage::get_starting_block_number(burn_router);
+        let transfer_deadline = burn_router_storage::get_transfer_deadline(burn_router);
         let block_number = *vector::borrow(&indexes_and_block_numbers, 2); // inputTxBlockNumber
         assert!(block_number >= starting_block_number, EOLD_REQUEST);
 
         // 4. Check if transaction is confirmed
         let input_tx_index = *vector::borrow(&indexes_and_block_numbers, 1);
-        assert!(btcrelay_mock::checkTxProof(
+        assert!(btcrelay::checkTxProof(
             btcrelay,
             input_tx_id,
             block_number,
@@ -175,13 +175,13 @@ module teleswap::burn_router_helper_mock {
         ), ENOT_FINALIZED);
 
         // 5. Check that input tx has not been provided as a burn proof
-        assert!(!burn_router_storage_mock::get_is_used_as_burn_proof(burn_router, input_tx_id), EALREADY_USED);
+        assert!(!burn_router_storage::get_is_used_as_burn_proof(burn_router, input_tx_id), EALREADY_USED);
 
         // 6. Set is_used_as_burn_proof to prevent multiple slashing
-        burn_router_storage_mock::set_is_used_as_burn_proof(burn_router, input_tx_id, true);
+        burn_router_storage::set_is_used_as_burn_proof(burn_router, input_tx_id, true);
 
         // 7. Check that deadline for using the tx as burn proof has passed
-        assert!(btcrelay_mock::lastSubmittedHeight(btcrelay) > transfer_deadline + block_number, EDEADLINE_NOT_PASSED_SLASH);
+        assert!(btcrelay::lastSubmittedHeight(btcrelay) > transfer_deadline + block_number, EDEADLINE_NOT_PASSED_SLASH);
 
         // 8. Extract outpoint id and index from input tx
         let input_vin = vector::borrow(&input_output_vin_vout, 0);
@@ -227,7 +227,7 @@ module teleswap::burn_router_helper_mock {
         locker_locking_script: vector<u8>,
         burn_req_indexes_length: u64,
         vout_indexes_length: u64,
-        locker_cap: & DummyLockerCap
+        locker_cap: & LockerCap
     ) {
         // Check that block_number >= starting_block_number
         assert!(block_number >= starting_block_number, EOLD_REQUEST);
@@ -246,7 +246,7 @@ module teleswap::burn_router_helper_mock {
         assert!(is_all_zeros, ENON_ZERO_LOCK_TIME);
 
         // Check if the locking script is valid (must be a locker)
-        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), ENOT_LOCKER);
+        assert!(lockerstorage::is_locker_mock(locker_locking_script,locker_cap), ENOT_LOCKER);
 
         // Check that burn_req_indexes_length == vout_indexes_length
         assert!(burn_req_indexes_length == vout_indexes_length, EWRONG_INDEXES);
@@ -265,13 +265,13 @@ module teleswap::burn_router_helper_mock {
         user_script: vector<u8>,
         script_type: u8,
         locker_locking_script: vector<u8>,
-        locker_cap: & DummyLockerCap
+        locker_cap: & LockerCap
     ) {
         // Check script length based on script type using existing helper function
         assert!(validate_script_length(&user_script, script_type), EINVALID_SCRIPT);
 
         // Check if the given locking script is locker
-        assert!(dummy_locker::is_locker(locker_locking_script,locker_cap), ENOT_LOCKER);
+        assert!(lockerstorage::is_locker_mock(locker_locking_script,locker_cap), ENOT_LOCKER);
     }
 
 
@@ -313,30 +313,30 @@ module teleswap::burn_router_helper_mock {
             };
 
             // Get the burn request using the getter
-            let request = burn_router_storage_mock::get_burn_request(burn_router, locker_target_address, burn_req_index);
+            let request = burn_router_storage::get_burn_request(burn_router, locker_target_address, burn_req_index);
 
             // Check that the request has not been paid and its deadline has not passed
-            if (!burn_router_storage_mock::is_transferred(&request) && burn_router_storage_mock::get_deadline(&request) >= block_number) {
+            if (!burn_router_storage::is_transferred(&request) && burn_router_storage::get_deadline(&request) >= block_number) {
                 // Parse amount from specific output having script
                 let parsed_amount = bitcoin_helper::parse_value_from_specific_output_having_script(
                     &vout,
                     vout_index,
-                    &burn_router_storage_mock::get_user_script(&request),
-                    burn_router_storage_mock::get_script_type(&request)
+                    &burn_router_storage::get_user_script(&request),
+                    burn_router_storage::get_script_type(&request)
                 );
                 // Check that locker has sent required teleBTC amount
-                if (burn_router_storage_mock::get_burnt_amount(&request) == parsed_amount) {
+                if (burn_router_storage::get_burnt_amount(&request) == parsed_amount) {
                     // Set is_transferred = true using setter
                     let mut updated_request = request;
-                    burn_router_storage_mock::set_is_transferred(&mut updated_request, true);
-                    burn_router_storage_mock::set_burn_request(burn_router, locker_target_address, burn_req_index, updated_request);
+                    burn_router_storage::set_is_transferred(&mut updated_request, true);
+                    burn_router_storage::set_burn_request(burn_router, locker_target_address, burn_req_index, updated_request);
                     
                     paid_output_counter = paid_output_counter + 1;
 
                     // Emit PaidUnwrapHelper event for each successful request
                     sui::event::emit(PaidUnwrapHelper {
                         locker_target_address,
-                        request_id: burn_router_storage_mock::get_request_id_of_locker(&updated_request),
+                        request_id: burn_router_storage::get_request_id_of_locker(&updated_request),
                         tx_id: tx_id,
                         vout_index,
                     });
@@ -358,14 +358,14 @@ module teleswap::burn_router_helper_mock {
         burn_router: &BurnRouter,
         input_vout: vector<u8>,
         locker_locking_script: vector<u8>,
-        locker_cap: & DummyLockerCap
+        locker_cap: & LockerCap
     ): (address, u64, u64) {
         // Find total value of malicious transaction (all outputs to locker)
         let total_value = bitcoin_helper::parse_outputs_total_value(&input_vout);
         // Get the target address of the locker from its Bitcoin address
-        let locker_target_address = dummy_locker::get_locker_target_address(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
         // Get slasher reward and max percentage fee from storage
-        let slasher_percentage_reward = burn_router_storage_mock::get_slasher_percentage_reward(burn_router);
+        let slasher_percentage_reward = burn_router_storage::get_slasher_percentage_reward(burn_router);
         let slasher_reward = (total_value * slasher_percentage_reward) / MAX_PERCENTAGE_FEE;
         (locker_target_address, slasher_reward, total_value)
     }

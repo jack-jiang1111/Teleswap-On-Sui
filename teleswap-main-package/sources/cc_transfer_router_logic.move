@@ -9,7 +9,7 @@ module teleswap::cc_transfer_router_logic {
     use teleswap::request_parser;
     use sui::coin::{Self, TreasuryCap};
     use sui::event;
-
+    use sui::clock::{Clock};
     // === Error Codes ===
 
     const EINVALID_LOCKER: u64 = 300;
@@ -136,6 +136,7 @@ module teleswap::cc_transfer_router_logic {
         tx_id: vector<u8>,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
+        clock: &Clock,
         ctx: &mut TxContext
     ):(u64,u64,u64,u64,u64,u64,address){
         // Calculate fees
@@ -149,7 +150,7 @@ module teleswap::cc_transfer_router_logic {
         let recipient_address = cc_transfer_router_storage::get_recipient(router, tx_id);
 
         // Mint teleBTC and get the coins
-        let (mut coins, locker_address) = lockercore::mint(locker_locking_script, amount, locker_cap, telebtc_cap, treasury_cap, recipient_address, ctx);
+        let (mut coins, locker_address) = lockercore::mint(locker_locking_script, amount, locker_cap, telebtc_cap, treasury_cap, recipient_address, clock, ctx);
 
         // Distribute fees to respective parties
         if (network_fee > 0) {
@@ -234,7 +235,7 @@ module teleswap::cc_transfer_router_logic {
         );
     }
 
-    /// Check if the request has been executed before
+    /// Check if the request has been execoin::cuted before
     /// This is to avoid re-submitting a used request
     /// @param router The CC transfer router capability
     /// @param tx_id The transaction ID of the request
@@ -263,6 +264,7 @@ module teleswap::cc_transfer_router_logic {
         relay: &mut BTCRelay,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
         // Validate that the provided BTCRelay is the legitimate one
@@ -326,7 +328,7 @@ module teleswap::cc_transfer_router_logic {
         let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
 
         // Process the wrap request
-        let (amount,received_amount,network_fee,locker_fee,protocol_fee,third_party_fee,recipient_address) = mint_and_distribute(router, locker_cap, locker_locking_script, tx_id, telebtc_cap, treasury_cap, ctx);
+        let (amount,received_amount,network_fee,locker_fee,protocol_fee,third_party_fee,recipient_address) = mint_and_distribute(router, locker_cap, locker_locking_script, tx_id, telebtc_cap, treasury_cap, clock, ctx);
        
         // Emit wrap completion event
         event::emit(NewWrap {

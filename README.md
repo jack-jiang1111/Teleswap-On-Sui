@@ -103,19 +103,34 @@ MIT
 1. Contracts will be upgraded using the upgrade Cap. The upgrade Cap will be assigned to deployer when deploying the contract
 2. Package id won't change when upgrading the contract (In Move, the address must be known at compile time for use statements. You cannot dynamically import a module at runtime.)
 3. The bridge/locker/burner/exchange/telebtc contracts will depend on each other by "use module"
-4. Development order: 
-  (6) locker contract testing
-  (8) exchange contract
-  (9) exchange contract testing
-  (10) overall testing with mock wbtc and mock btcrelay
-  (11) deployer script
 
-Other TODO:
+
+Other TODOs:
 -- Need to update deploy script due to directory messed up (will do after all the contracts done)
 -- Telebtc test rewrite due to telebtc restructure (will do after locker contract)
--- fix tests (after locker contract)
 -- "swap and burn" in burn router will be finished after the exchange contract
 -- Error code re orgnize
+-- safe math rescan all files
+-- reentrancy issue rescan
 -- BURN and distribute fee should call burn instead, put the burn logic in the connector
--- type mismatch
+
+-- locker need to assert only accpect wbtc
+
+Mainnet/testnet update
+-- All the function in burn_router_locker_connector needs to be public(package)
+-- set net_mint will be removed in real implmentation
+
+
+-- Three version of the projects
+    -- localnet mock version: only available to local test
+    -- test version: besides from wbtc and btcrelay, all other files remain the same as mainnet
+    -- mainnet version: ready to ship version
+
+TODO:
+4. working on exchange contract
+5. exchange contract test
+6. deployer script
+7. testnet intergration test
+8. gas improvement
+
 

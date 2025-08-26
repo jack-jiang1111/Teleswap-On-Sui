@@ -20,6 +20,7 @@ export interface MoveCallOptions {
     client?: SuiClient;
     waitForConfirmation?: boolean;
     returnValue?: boolean;
+    returnObject?: boolean; // New flag to handle returned objects
 }
 
 /**
@@ -38,7 +39,8 @@ export async function callMoveFunction(options: MoveCallOptions) {
         signer,
         client,
         waitForConfirmation = true,
-        returnValue = false
+        returnValue = false,
+        returnObject = false
     } = options;
 
     // Get client and signer
@@ -70,32 +72,47 @@ export async function callMoveFunction(options: MoveCallOptions) {
         return tx.pure(arg);
     }).filter(arg => arg !== undefined);
     // Add the Move call
-    tx.moveCall({
+    const moveCallResult = tx.moveCall({
         target: `${packageId}::${moduleName}::${functionName}`,
         arguments: convertedArgs,
         typeArguments,
     });
+
+    // If returnObject is true, we need to transfer the returned objects to the signer
+    if (returnObject) {
+        // Transfer all returned objects to the signer
+        if (Array.isArray(moveCallResult)) {
+            moveCallResult.forEach((returnValue, index) => {
+                tx.transferObjects([returnValue], tx.pure(activeSigner.toSuiAddress()));
+            });
+        } else {
+            tx.transferObjects([moveCallResult], tx.pure(activeSigner.toSuiAddress()));
+        }
+    }
+
     let result = null;
-    if(returnValue){
+    if(returnValue) {
         result = await suiClient.devInspectTransactionBlock({
             transactionBlock: tx,
             sender: activeSigner.toSuiAddress(),
         });
-    }
-    else{
+    } else {
         result = await suiClient.signAndExecuteTransactionBlock({
-        transactionBlock: tx,
-        signer: activeSigner,
-        options: { showEffects: true, showEvents: true }
+            transactionBlock: tx,
+            signer: activeSigner,
+            options: { showEffects: true, showEvents: true }
         });
     }
 
     // Wait for confirmation if requested
     if (waitForConfirmation && !returnValue) {
-        await suiClient.waitForTransactionBlock({
-            digest: result.digest,
-            options: { showEffects: true, showEvents: true }
-        });
+        // Check if result has digest property (SuiTransactionBlockResponse)
+        if ('digest' in result) {
+            await suiClient.waitForTransactionBlock({
+                digest: result.digest,
+                options: { showEffects: true, showEvents: true }
+            });
+        }
     }
 
     return result;

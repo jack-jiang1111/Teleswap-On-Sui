@@ -23,6 +23,7 @@ run deploy file
 npx ts-node scripts/deploy.ts testnet
 
 sui move build --skip-fetch-latest-git-deps
+npm test -- tests/locker.test.ts
 
 git config --global http.proxy http://127.0.0.1:7897
 git config --global https.proxy http://127.0.0.1:7897
