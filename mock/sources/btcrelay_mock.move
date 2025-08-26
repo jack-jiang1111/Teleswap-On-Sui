@@ -1,5 +1,5 @@
 #[allow(unused)]
-module btcrelay::btcrelay_mock {
+module teleswap::btcrelay {
     // ------------------------------------------------------
     // The whole contract is a mock of btcrelay, it is used for testing
     // checkTxProof is the function always return btcrelay.test_Value
@@ -10,11 +10,11 @@ module btcrelay::btcrelay_mock {
     use sui::event;
     use sui::package::{Self, UpgradeCap};
     use std::string::{Self, String};
-    use btcrelay::bitcoin_helper::{Self as BitcoinHelper}; // Helper module for Bitcoin-specific operations
+    use teleswap::bitcoin_helper::{Self as BitcoinHelper}; // Helper module for Bitcoin-specific operations
 
     use std::address::length;
-    use btcrelay::bitcoin_helper::hex_to_bytes;
-    use btcrelay::bitcoin_helper;
+    use teleswap::bitcoin_helper::hex_to_bytes;
+    use teleswap::bitcoin_helper;
 
     // === Error Codes ===
     // Error codes for various validation and operation failures

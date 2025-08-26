@@ -7,7 +7,7 @@ module teleswap::lockerhelper {
     
     // Import burn router and related modules
     use teleswap::burn_router_logic::{Self};
-    use btcrelay::btcrelay::{Self, BTCRelay};
+    use teleswap::btcrelay::{Self, BTCRelay};
     use teleswap::burn_router_storage::{Self, BurnRouter};
     use teleswap::burn_router_locker_connector::{Self};
     
@@ -24,6 +24,8 @@ module teleswap::lockerhelper {
     const ERROR_INSUFFICIENT_FUNDS: u64 = 525;
     const ERROR_HEALTH_LOCKER: u64 = 526;
     const ERROR_ALREADY_IN_QUEUE: u64 = 527;
+    const ERROR_INSUFFICIENT_COLLATERAL_FOR_SLASH: u64 = 528;
+    const ERROR_INSUFFICIENT_CAPACITY: u64 = 529;
     // Helper functions from lockerlib.sol
     /// @notice Helper function to request to become a locker
     /// @dev This function handles the core logic for creating a locker candidate. Validates inputs and creates the locker object.
@@ -38,7 +40,7 @@ module teleswap::lockerhelper {
     public(package) fun request_to_become_locker(
         locker_cap: &mut LockerCap,
         the_locker_target_address: address,
-        _locked_collateral_token_amount: u64,
+        _locked_collateral_token_amount: u256,
         _candidate_locking_script: vector<u8>,
         _locker_script_type: u8,
         _locker_rescue_script: vector<u8>,
@@ -83,8 +85,8 @@ module teleswap::lockerhelper {
     /// @return Amount of TeleBTC needed
     public(package) fun buy_slashed_collateral_of_locker(
         _the_locker: &mut Locker,
-        _collateral_amount: u64
-    ): u64 {
+        _collateral_amount: u256
+    ): u256 {
         // Validate locker is active
         assert!(lockerstorage::is_locker_struct_active(_the_locker), ERROR_NOT_LOCKER);
         
@@ -93,7 +95,7 @@ module teleswap::lockerhelper {
         let reserved_collateral = lockerstorage::get_reserved_collateral_token_for_slash(_the_locker);
         
         // Validate enough slashed collateral to buy
-        assert!(_collateral_amount <= reserved_collateral, ERROR_INSUFFICIENT_FUNDS);
+        assert!(_collateral_amount <= reserved_collateral, ERROR_INSUFFICIENT_COLLATERAL_FOR_SLASH);
         
         // Calculate needed TeleBTC
         let needed_telebtc = (slashing_telebtc_amount * _collateral_amount) / reserved_collateral;
@@ -121,9 +123,9 @@ module teleswap::lockerhelper {
     public(package) fun liquidate_locker(
         locker_target_address: address,
         locker_cap: &mut LockerCap,
-        _collateral_amount: u64,
-        _reliability_factor: u64
-    ): u64 {
+        _collateral_amount: u256,
+        _reliability_factor: u256
+    ): u256 {
         // Get price of one unit of collateral in BTC
         let price_of_collateral = lockerstorage::price_of_one_unit_of_collateral_in_btc(
             locker_cap
@@ -168,115 +170,11 @@ module teleswap::lockerhelper {
         // Add 1 to prevent precision loss
         needed_telebtc + 1
     }
-
-    public(package) fun slash_thief_locker(
-        locker_target_address: address,
-        locker_cap: &mut LockerCap,
-        _reliability_factor: u64,
-        _reward_amount: u64,
-        _amount: u64
-    ): (u64, u64) {
-        
-        
-        // Calculate equivalent collateral token using price oracle
-        let equivalent_collateral_token = price_oracle::equivalent_output_amount(
-            _amount, // Total amount of TeleBTC that is slashed
-            8, // Decimal of teleBTC
-            8, // Decimal of locked collateral
-            @0x0, // teleBTC address (placeholder)
-            @0x0 // Output token
-        );
-        
-        // Calculate reward in collateral token
-        let reward_in_collateral_token = (equivalent_collateral_token * _reward_amount) / _amount;
-        
-        // Calculate needed collateral token for slash
-        let needed_collateral_token_for_slash = (equivalent_collateral_token * lockerstorage::get_liquidation_ratio(locker_cap) * _reliability_factor) / 
-            (lockerstorage::get_one_hundred_percent(lockerstorage::get_lib_constants(locker_cap)) * lockerstorage::get_one_hundred_percent(lockerstorage::get_lib_constants(locker_cap)));
-        
-        let the_locker = lockerstorage::get_mut_locker_from_mapping(locker_cap, locker_target_address);
-        // Validate locker is active
-        assert!(lockerstorage::is_locker_struct_active(the_locker), ERROR_NOT_LOCKER);
-
-        // Get current values
-        let current_collateral = lockerstorage::get_collateral_token_locked_amount(the_locker);
-        let current_net_minted = lockerstorage::get_net_minted(the_locker);
-        let current_slashing_telebtc = lockerstorage::get_slashing_telebtc_amount(the_locker);
-        let current_reserved_collateral = lockerstorage::get_reserved_collateral_token_for_slash(the_locker);
-        
-        // Check if total exceeds locker's collateral
-        let (final_reward, final_needed) = if ((reward_in_collateral_token + needed_collateral_token_for_slash) > current_collateral) {
-            // Divide total locker's collateral proportional to reward amount and slash amount
-            let proportional_reward = (reward_in_collateral_token * current_collateral) / 
-                (reward_in_collateral_token + needed_collateral_token_for_slash);
-            let proportional_needed = current_collateral - proportional_reward;
-            (proportional_reward, proportional_needed)
-        } else {
-            (reward_in_collateral_token, needed_collateral_token_for_slash)
-        };
-        
-        // Update locker's bond (in collateral token)
-        lockerstorage::set_collateral_token_locked_amount(the_locker, current_collateral - (final_reward + final_needed));
-        
-        // Update net minted (cap at net minted if amount exceeds it)
-        let amount_to_deduct = if (_amount > current_net_minted) {
-            current_net_minted
-        } else {
-            _amount
-        };
-        lockerstorage::set_net_minted(the_locker, current_net_minted - amount_to_deduct);
-        
-        // Update slashing info
-        lockerstorage::set_slashing_telebtc_amount(the_locker, current_slashing_telebtc + _amount);
-        lockerstorage::set_reserved_collateral_token_for_slash(the_locker, current_reserved_collateral + final_needed);
-        
-        (final_reward, final_needed)
-    }
-
-    // public(package) fun slash_idle_locker(
-    //     locker_target_address: address,
-    //     locker_cap: &mut LockerCap,
-    //     _reward_amount: u64,
-    //     _amount: u64
-    // ): (u64, u64) {
-    //     let the_locker = lockerstorage::get_mut_locker_from_mapping(locker_cap, locker_target_address);
-
-    //     // Validate locker is active
-    //     assert!(lockerstorage::is_locker_struct_active(the_locker), ERROR_NOT_LOCKER);
-        
-    //     // Calculate equivalent collateral token using price oracle
-    //     let equivalent_collateral_token = price_oracle::equivalent_output_amount(
-    //         _reward_amount + _amount, // Total amount of TeleBTC that is slashed
-    //         8, // Decimal of teleBTC
-    //         8, // Decimal of locked collateral
-    //         @0x0, // teleBTC address (placeholder)
-    //         @0x0 // Output token
-    //     );
-        
-    //     // Get current collateral amount
-    //     let current_collateral = lockerstorage::get_collateral_token_locked_amount(the_locker);
-        
-    //     // Cap at locker's collateral if it exceeds
-    //     let final_equivalent_collateral_token = if (equivalent_collateral_token > current_collateral) {
-    //         current_collateral
-    //     } else {
-    //         equivalent_collateral_token
-    //     };
-        
-    //     // Update locker's bond (in collateral token)
-    //     lockerstorage::set_collateral_token_locked_amount(the_locker, current_collateral - final_equivalent_collateral_token);
-        
-    //     // Calculate reward amount in collateral token
-    //     let reward_amount_in_collateral_token = final_equivalent_collateral_token - 
-    //         ((final_equivalent_collateral_token * _amount) / (_amount + _reward_amount));
-        
-    //     (final_equivalent_collateral_token, reward_amount_in_collateral_token)
-    // }
     
     public(package) fun mint_helper(
         locker_cap: &mut LockerCap,
         _locker_target_address: address,
-        amount: u64
+        amount: u256
     ) {
         // Get all necessary data from locker_cap
         let reliability_factor = lockerstorage::get_reliability_factor(locker_cap, _locker_target_address);
@@ -286,13 +184,12 @@ module teleswap::lockerhelper {
         
         // Calculate locker capacity
         let the_locker_capacity = lockerstorage::get_locker_capacity(
-            the_locker_ref,
             locker_cap,
             _locker_target_address,
         );
         
         // Validate capacity is sufficient
-        assert!(the_locker_capacity >= amount as u256, ERROR_INSUFFICIENT_FUNDS);
+        assert!(the_locker_capacity >= amount, ERROR_INSUFFICIENT_CAPACITY);
         
         // Get locker from mapping for updates
         let the_locker = lockerstorage::get_mut_locker_from_mapping(locker_cap, _locker_target_address);

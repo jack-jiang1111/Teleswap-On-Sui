@@ -1,5 +1,7 @@
 #[allow(unused)]
-module teleswap::telebtc_mock {
+module teleswap::telebtc {
+    // This is a mock contract for the telebtc contract
+    // any address can mint and burn telebtc
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::table::{Self, Table};
     use sui::package::{Self, UpgradeCap};
@@ -21,7 +23,7 @@ module teleswap::telebtc_mock {
     // Constants
     const INITIAL_MINT_LIMIT: u64 = 100000000000; // 10^11
 
-    public struct TELEBTC_MOCK has drop {}
+    public struct TELEBTC has drop {}
 
     /// Admin control structure for the contract
     /// Stores owner address
@@ -64,7 +66,7 @@ module teleswap::telebtc_mock {
         is_added: bool
     }
 
-    fun init(witness: TELEBTC_MOCK, ctx: &mut TxContext) {
+    fun init(witness: TELEBTC, ctx: &mut TxContext) {
         // Create and transfer the admin object to the sender
         transfer::transfer(TELEBTC_ADMIN { 
             id: object::new(ctx),
@@ -159,11 +161,11 @@ module teleswap::telebtc_mock {
     // Minting and burning
     public fun mint(
         cap: &mut TeleBTCCap,
-        treasury_cap: &mut TreasuryCap<TELEBTC_MOCK>,
+        treasury_cap: &mut TreasuryCap<TELEBTC>,
         receiver: address,
         amount: u64,
         ctx: &mut TxContext
-    ): Coin<TELEBTC_MOCK> {
+    ): Coin<TELEBTC> {
         assert!(amount > 0, EZERO_VALUE);
         assert!(amount <= cap.max_mint_limit, EMINT_LIMIT_EXCEEDED);
         assert!(check_and_reduce_mint_limit(cap, amount, ctx), EEPOCH_MINT_LIMIT_REACHED);
@@ -175,12 +177,11 @@ module teleswap::telebtc_mock {
 
     public fun burn(
         cap: &mut TeleBTCCap,
-        treasury_cap: &mut TreasuryCap<TELEBTC_MOCK>,
-        coins: Coin<TELEBTC_MOCK>,
+        treasury_cap: &mut TreasuryCap<TELEBTC>,
+        coins: Coin<TELEBTC>,
         ctx: &mut TxContext
     ):bool {
         let amount = coin::value(&coins);
-        assert!(amount > 0, EZERO_VALUE);
         
         let burned_amount = coin::burn(treasury_cap, coins);
         event::emit(BurnEvent { amount: burned_amount });
@@ -264,5 +265,11 @@ module teleswap::telebtc_mock {
         } else {
             false
         }
+    }
+
+    /// Returns a zero value TeleBTC coin
+    /// This is useful for testing and when you need to provide a coin with zero value
+    public fun zero_coin(ctx: &mut TxContext): Coin<TELEBTC> {
+        coin::zero(ctx)
     }
 } 

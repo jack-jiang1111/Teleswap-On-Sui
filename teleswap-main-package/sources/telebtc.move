@@ -178,10 +178,7 @@ module teleswap::telebtc {
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         coins: Coin<TELEBTC>,
         ctx: &mut TxContext
-    ):bool {
-        let amount = coin::value(&coins);
-        assert!(amount > 0, EZERO_VALUE);
-        
+    ):bool {        
         let burned_amount = coin::burn(treasury_cap, coins);
         event::emit(BurnEvent { amount: burned_amount });
         true
@@ -264,5 +261,11 @@ module teleswap::telebtc {
         } else {
             false
         }
+    }
+
+    /// Returns a zero value TeleBTC coin
+    /// This is useful for testing and when you need to provide a coin with zero value
+    public fun zero_coin(ctx: &mut TxContext): Coin<TELEBTC> {
+        coin::zero(ctx)
     }
 } 
