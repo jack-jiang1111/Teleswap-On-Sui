@@ -24,14 +24,14 @@ module teleswap::lockercore {
     const ERROR_NOT_LOCKER: u64 = 535;
 
 
-public struct DebugEvent has copy, drop {
-        num1: u256,
-        num2: u256,
-        num3: u256,
-        num4: u256,
-        num5: u256,
-    }
-    /// @notice Mints TeleBTC tokens will only be called by the cctransfer contract
+    // public struct DebugEvent has copy, drop {
+    //     num1: u256,
+    //     num2: u256,
+    //     num3: u256,
+    //     num4: u256,
+    //     num5: u256,
+    // }
+    /// @notice Mints TeleBTC tokens will only be called by the cctransfer contract and cc_exchange_logic
     /// @param _locker_locking_script Locker locking script
     /// @param _amount Amount to mint
     /// @param locker_cap The locker capability object
@@ -67,7 +67,7 @@ public struct DebugEvent has copy, drop {
         );
         
         // Mint TeleBTC using the telebtc module
-        let coins = telebtc::mint(telebtc_cap, treasury_cap, _receiver, _amount as u64, ctx);
+        let coins = telebtc::mint(telebtc_cap, treasury_cap, _amount as u64, ctx);
         
         // Emit mint event
         lockerstorage::emit_mint_by_locker_event(

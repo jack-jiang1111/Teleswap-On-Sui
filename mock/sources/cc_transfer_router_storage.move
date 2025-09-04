@@ -64,6 +64,35 @@ module teleswap::cc_transfer_router_storage {
         owner: address                                           // Contract owner address
     }
 
+    // === Getter Functions for TxAndProof ===
+    public fun version(tx_and_proof: &TxAndProof): &vector<u8> {
+        &tx_and_proof.version
+    }
+
+    public fun vin(tx_and_proof: &TxAndProof): &vector<u8> {
+        &tx_and_proof.vin
+    }
+
+    public fun vout(tx_and_proof: &TxAndProof): &vector<u8> {
+        &tx_and_proof.vout
+    }
+
+    public fun locktime(tx_and_proof: &TxAndProof): &vector<u8> {
+        &tx_and_proof.locktime
+    }
+
+    public fun block_number(tx_and_proof: &TxAndProof): u64 {
+        tx_and_proof.block_number
+    }
+
+    public fun intermediate_nodes(tx_and_proof: &TxAndProof): &vector<u8> {
+        &tx_and_proof.intermediate_nodes
+    }
+
+    public fun index(tx_and_proof: &TxAndProof): u64 {
+        tx_and_proof.index
+    }
+
     // === Events ===
 
     /// Emitted when a new transfer request is created
@@ -603,7 +632,7 @@ module teleswap::cc_transfer_router_storage {
     /// @param intermediate_nodes Merkle proof nodes
     /// @param index Transaction index in block
     /// @return New TxAndProof instance
-    public fun create_tx_and_proof(
+    public(package) fun create_tx_and_proof(
         version: vector<u8>,
         vin: vector<u8>,
         vout: vector<u8>,

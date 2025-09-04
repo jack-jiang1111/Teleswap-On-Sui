@@ -1,5 +1,5 @@
 #[allow( lint(self_transfer),lint(share_owned),unused_field)]
-module teleswap::cc_transfer_router_test {
+module teleswap::cc_transfer_router_logic {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
     use teleswap::telebtc::{TeleBTCCap, TELEBTC};
     use teleswap::btcrelay::{Self, BTCRelay};
@@ -158,7 +158,7 @@ module teleswap::cc_transfer_router_test {
         let recipient_address = cc_transfer_router_storage::get_recipient(router, tx_id);
 
         // Mint teleBTC and get the coins
-        let (mut coins, locker_address) = lockerstorage::mint_mock(locker_locking_script, amount, locker_cap, telebtc_cap, treasury_cap, recipient_address, ctx);
+        let (mut coins, locker_address) = lockerstorage::mint_mock(locker_locking_script, amount, locker_cap, telebtc_cap, treasury_cap, ctx);
 
         // Distribute fees to respective parties
         if (network_fee > 0) {

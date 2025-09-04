@@ -1588,11 +1588,10 @@ module teleswap::lockerstorage {
         locker_cap: &mut LockerCap,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
-        receiver: address,
         ctx: &mut TxContext
     ): (Coin<TELEBTC>, address) {
         // Call the telebtc mint function and return the minted coins
-        let coins = telebtc::mint(telebtc_cap, treasury_cap, receiver, amount, ctx);
+        let coins = telebtc::mint(telebtc_cap, treasury_cap, amount, ctx);
         let locker_address = @0x0000000000000000000000000000000000000000000000000000000000000003; // just a place holder, will implement later when doing the locker contract
         (coins, locker_address)
     }

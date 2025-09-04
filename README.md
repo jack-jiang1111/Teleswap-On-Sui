@@ -113,8 +113,8 @@ Other TODOs:
 -- safe math rescan all files
 -- reentrancy issue rescan
 -- BURN and distribute fee should call burn instead, put the burn logic in the connector
-
 -- locker need to assert only accpect wbtc
+-- Reward distribute system in ccexchange and cc transfer(made it in locker, send fee to lockers)
 
 Mainnet/testnet update
 -- All the function in burn_router_locker_connector needs to be public(package)
@@ -127,7 +127,7 @@ Mainnet/testnet update
     -- mainnet version: ready to ship version
 
 TODO:
-4. working on exchange contract
+4. working on exchange contract && dexconnector
 5. exchange contract test
 6. deployer script
 7. testnet intergration test

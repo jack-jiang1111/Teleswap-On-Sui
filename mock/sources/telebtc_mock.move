@@ -44,7 +44,6 @@ module teleswap::telebtc {
     }
 
     public struct MintEvent has copy, drop {
-        receiver: address,
         amount: u64
     }
 
@@ -162,7 +161,6 @@ module teleswap::telebtc {
     public fun mint(
         cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
-        receiver: address,
         amount: u64,
         ctx: &mut TxContext
     ): Coin<TELEBTC> {
@@ -171,7 +169,7 @@ module teleswap::telebtc {
         assert!(check_and_reduce_mint_limit(cap, amount, ctx), EEPOCH_MINT_LIMIT_REACHED);
         
         let coins = coin::mint(treasury_cap, amount, ctx);
-        event::emit(MintEvent {receiver, amount });
+        event::emit(MintEvent { amount });
         coins
     }
 
