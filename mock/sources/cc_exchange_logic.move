@@ -55,22 +55,22 @@ module teleswap::cc_exchange_logic {
     }
 
     // Error codes
-    const EZERO_ADDRESS: u64 = 200;
-    const EINVALID_AMOUNT: u64 = 201;
-    const EALREADY_USED: u64 = 202;
-    const EINVALID_LENGTH: u64 = 203;
-    const ENOT_OWNER: u64 = 204;
-    const EINVALID_FEE: u64 = 304;
-    const ENOT_FINALIZED: u64 = 305;
-    const EINVALID_SIGNATURE: u64 = 306;
-    const EINVALID_BTCRELAY: u64 = 307;
-    const EINVALID_TELEPORTER: u64 = 308;
-    const EOLD_REQUEST: u64 = 309;
-    const ENON_ZERO_LOCKTIME: u64 = 310;
-    const ENOT_LOCKER: u64 = 311;
-    const EINVALID_APP_ID: u64 = 312;
-    const EINVALID_REMAINING_COIN: u64 = 313;
-    const EINVALID_TARGET_TOKEN: u64 = 314;
+    const EZERO_ADDRESS: u64 = 611;
+    const EINVALID_AMOUNT: u64 = 612;
+    const EALREADY_USED: u64 = 613;
+    const EINVALID_LENGTH: u64 = 614;
+    const ENOT_OWNER: u64 = 615;
+    const EINVALID_FEE: u64 = 616;
+    const ENOT_FINALIZED: u64 = 617;
+    const EINVALID_SIGNATURE: u64 = 618;
+    const EINVALID_BTCRELAY: u64 = 619;
+    const EINVALID_TELEPORTER: u64 = 620;
+    const EOLD_REQUEST: u64 = 621;
+    const ENON_ZERO_LOCKTIME: u64 = 622;
+    const ENOT_LOCKER: u64 = 623;
+    const EINVALID_APP_ID: u64 = 624;
+    const EINVALID_REMAINING_COIN: u64 = 625;
+    const EINVALID_TARGET_TOKEN: u64 = 626;
     // Constants
     const REQUEST_DATA_LENGTH: u64 = 58; // Exchange request is 58 bytes
     const BRIDGE_FEE_MULTIPLIER: u64 = 100000000000; // 10^11

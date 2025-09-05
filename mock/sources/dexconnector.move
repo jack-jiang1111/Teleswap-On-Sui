@@ -17,16 +17,17 @@ module teleswap::dexconnector {
     use sui::balance::{Self, Balance};
 
     // Error codes
-    const EZERO_ADDRESS: u64 = 400;
-    const EINVALID_AMOUNT: u64 = 401;
-    const EINVALID_PATH: u64 = 402;
-    const ESWAP_FAILED: u64 = 403;
-    const EINVALID_DEADLINE: u64 = 404;
-    const EPOOL_NOT_FOUND: u64 = 405;
-    const EINSUFFICIENT_LIQUIDITY: u64 = 406;
-    const EUNSUPPORTED_PATH: u64 = 407;
-    const EPOOL_NOT_INITIALIZED: u64 = 408;
-    const EVALID_TARGET_TOKEN: u64 = 409;
+    const EZERO_ADDRESS: u64 = 421;
+    const EINVALID_AMOUNT: u64 = 422;
+    const EINVALID_PATH: u64 = 423;
+    const ESWAP_FAILED: u64 = 424;
+    const EINVALID_DEADLINE: u64 = 425;
+    const EPOOL_NOT_FOUND: u64 = 426;
+    const EINSUFFICIENT_LIQUIDITY: u64 = 427;
+    const EUNSUPPORTED_PATH: u64 = 428;
+    const EPOOL_NOT_INITIALIZED: u64 = 429;
+    const EVALID_TARGET_TOKEN: u64 = 430;
+    const EINVALID_INPUT_AMOUNT: u64 = 431;
 
     // Events
     /// Emitted when a swap completes successfully.
@@ -308,12 +309,16 @@ module teleswap::dexconnector {
 
             // Get quote for the swap
             let (status, quote_amount) = if (wbtc_amount > 0) {
+                assert!(wbtc_amount == input_amount, EINVALID_INPUT_AMOUNT);
                 getQuoteBuyTelebtc<WBTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, wbtc_amount, min_output_amount)
             } else if (sui_amount > 0) {
+                assert!(sui_amount == input_amount, EINVALID_INPUT_AMOUNT);
                 getQuoteBuyTelebtc<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, sui_amount, min_output_amount)
             } else if (usdt_amount > 0) {
+                assert!(usdt_amount == input_amount, EINVALID_INPUT_AMOUNT);
                 getQuoteBuyTelebtc<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, usdt_amount, min_output_amount)
             } else if (usdc_amount > 0) {
+                assert!(usdc_amount == input_amount, EINVALID_INPUT_AMOUNT);
                 getQuoteBuyTelebtc<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, usdc_amount, min_output_amount)
             } else {
                 (false, 0)

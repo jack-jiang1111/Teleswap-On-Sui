@@ -8,10 +8,10 @@ module teleswap::burn_router_storage {
     const DUST_SATOSHI_AMOUNT: u64 = 1000;
 
     // Error codes
-    const EINVALID_ADMIN: u64 = 233;
-    const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 234;
-    const EALREADY_INITIALIZED: u64 = 235;
-    const EINVALID_FEE: u64 = 236;
+    const EINVALID_ADMIN: u64 = 225;
+    const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 226;
+    const EALREADY_INITIALIZED: u64 = 227;
+    const EINVALID_FEE: u64 = 228;
     // ===== STRUCTURES =====
     public struct BurnRequest has store, copy,drop {
         amount: u64,

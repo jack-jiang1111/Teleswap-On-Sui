@@ -10,20 +10,20 @@ module teleswap::burn_router_helper {
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%
     
     // Error codes
-    const EALREADY_PAID: u64 = 236;
-    const EDEADLINE_NOT_PASSED: u64 = 237;
-    const EOLD_REQUEST: u64 = 238;
-    const ENOT_LOCKER: u64 = 239;
-    const EWRONG_INPUTS: u64 = 240;
-    const ENOT_FINALIZED: u64 = 241;
-    const EALREADY_USED: u64 = 242;
-    const EDEADLINE_NOT_PASSED_SLASH: u64 = 243;
-    const EWRONG_OUTPUT_TX: u64 = 244;
-    const ENOT_FOR_LOCKER: u64 = 245;
-    const ENON_ZERO_LOCK_TIME: u64 = 246;
-    const EWRONG_INDEXES: u64 = 247;
-    const EINVALID_SCRIPT: u64 = 249;
-    const EUNSORTED_VOUT_INDEXES: u64 = 250;
+    const EALREADY_PAID: u64 = 210;
+    const EDEADLINE_NOT_PASSED: u64 = 211;
+    const EOLD_REQUEST: u64 = 212;
+    const ENOT_LOCKER: u64 = 213;
+    const EWRONG_INPUTS: u64 = 214;
+    const ENOT_FINALIZED: u64 = 215;
+    const EALREADY_USED: u64 = 216;
+    const EDEADLINE_NOT_PASSED_SLASH: u64 = 217;
+    const EWRONG_OUTPUT_TX: u64 = 218;
+    const ENOT_FOR_LOCKER: u64 = 219;
+    const ENON_ZERO_LOCK_TIME: u64 = 220;
+    const EWRONG_INDEXES: u64 = 221;
+    const EINVALID_SCRIPT: u64 = 222;
+    const EUNSORTED_VOUT_INDEXES: u64 = 223;
 
     // ===== STRUCTURES =====
     // P2PK: u8 = 1, 32bytes

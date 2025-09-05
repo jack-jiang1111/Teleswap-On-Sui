@@ -14,12 +14,12 @@ module teleswap::exchangestorage {
     const REGULAR_SLIPPAGE: u64 = 1500; // Not used
 
     // Error codes
-    const EZERO_ADDRESS: u64 = 100;
-    const EINVALID_AMOUNT: u64 = 101;
-    const EALREADY_USED: u64 = 102;
-    const EINVALID_LENGTH: u64 = 103;
-    const ENOT_OWNER: u64 = 104;
-    const EALREADY_INITIALIZED: u64 = 105;
+    const EZERO_ADDRESS: u64 = 600;
+    const EINVALID_AMOUNT: u64 = 601;
+    const EALREADY_USED: u64 = 602;
+    const EINVALID_LENGTH: u64 = 603;
+    const ENOT_OWNER: u64 = 604;
+    const EALREADY_INITIALIZED: u64 = 605;
 
     // Structures
     // Main logic structure

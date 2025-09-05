@@ -108,7 +108,7 @@ MIT
 Other TODOs:
 -- Need to update deploy script due to directory messed up (will do after all the contracts done)
 -- Telebtc test rewrite due to telebtc restructure (will do after locker contract)
--- "swap and burn" in burn router will be finished after the exchange contract
+-- "swap and burn" test
 -- Error code re orgnize
 -- safe math rescan all files
 -- reentrancy issue rescan
@@ -127,7 +127,6 @@ Mainnet/testnet update
     -- mainnet version: ready to ship version
 
 TODO:
-4. working on exchange contract && dexconnector
 5. exchange contract test
 6. deployer script
 7. testnet intergration test

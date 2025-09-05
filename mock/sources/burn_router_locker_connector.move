@@ -16,41 +16,13 @@ module teleswap::burn_router_locker_connector {
     const DUST_SATOSHI_AMOUNT: u64 = 1000;
     
     // Error codes
-    const EZERO_ADDRESS: u64 = 200;
-    const ENOT_ORACLE: u64 = 201;
-    const ELOW_STARTING_BLOCK: u64 = 202;
-    const EINVALID_FEE: u64 = 203;
-    const EINVALID_REWARD: u64 = 204;
-    const ELOW_DEADLINE: u64 = 205;
-    const ENOT_LOCKER: u64 = 512;
-    const ETRANSFER_FAILED: u64 = 207;
-    const EEXCHANGE_FAILED: u64 = 208;
-    const EINVALID_PATH: u64 = 209;
-    const EWRONG_AMOUNTS: u64 = 210;
-    const EINVALID_AMOUNT: u64 = 211;
-    const ELOW_FEE: u64 = 212;
-    const EFEE_TRANSFER_FAILED: u64 = 213;
-    const ETHIRD_PARTY_FEE_TRANSFER_FAILED: u64 = 214;
-    const ENETWORK_FEE_TRANSFER_FAILED: u64 = 215;
-    const EALREADY_PAID: u64 = 216;
-    const EDEADLINE_NOT_PASSED: u64 = 217;
-    const EOLD_REQUEST: u64 = 218;
-    const EWRONG_INPUTS: u64 = 219;
-    const ENOT_FINALIZED: u64 = 220;
-    const EALREADY_USED: u64 = 221;
-    const EDEADLINE_NOT_PASSED_SLASH: u64 = 222;
-    const EWRONG_OUTPUT_TX: u64 = 223;
-    const ENOT_FOR_LOCKER: u64 = 224;
-    const EINVALID_SCRIPT: u64 = 228;
-    const EUNSORTED_VOUT_INDEXES: u64 = 229;
-    const EINVALID_BURN_PROOF: u64 = 230;
-    const EINVALID_LOCKER: u64 = 231;
-    const EALREADY_INITIALIZED: u64 = 232;
+    const ELOW_FEE: u64 = 231;
+    const EDEADLINE_NOT_PASSED: u64 = 232;
     const EINVALID_BTCRELAY: u64 = 233;
     const ERROR_IS_PAUSED: u64 = 234;
     const ERROR_INSUFFICIENT_FUNDS: u64 = 235;
     const ERROR_BURN_FAILED: u64 = 236;
-    const ERROR_NOT_LOCKER: u64 = 512;
+    const ERROR_NOT_LOCKER: u64 = 237;
 
     // ===== EVENTS =====
     public struct NewUnwrap has copy, drop {
@@ -341,7 +313,7 @@ module teleswap::burn_router_locker_connector {
         // Check if system is paused
         assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
         
-        assert!(lockerstorage::is_locker_by_address(locker_cap, _locker_target_address), ENOT_LOCKER);
+        assert!(lockerstorage::is_locker_by_address(locker_cap, _locker_target_address),ERROR_NOT_LOCKER);
         
         // Get values from locker_cap before getting mutable reference
         let reliability_factor = lockerstorage::get_reliability_factor(locker_cap, _locker_target_address);
@@ -352,7 +324,7 @@ module teleswap::burn_router_locker_connector {
         // Get the locker from mapping for calculations
         let the_locker = lockerstorage::get_locker_from_mapping(locker_cap, _locker_target_address);
         // Validate locker is active
-        assert!(lockerstorage::is_locker_struct_active(the_locker), ENOT_LOCKER);
+        assert!(lockerstorage::is_locker_struct_active(the_locker), ERROR_NOT_LOCKER);
 
         // Calculate equivalent collateral token using price oracle
         let equivalent_collateral_token = price_oracle::equivalent_output_amount(

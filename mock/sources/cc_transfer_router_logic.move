@@ -11,18 +11,18 @@ module teleswap::cc_transfer_router_logic {
 
     // === Error Codes ===
 
-    const EINVALID_LOCKER: u64 = 11;
-    const EINVALID_DATA_LENGTH: u64 = 12;
-    const EZERO_INPUT_AMOUNT: u64 = 13;
-    const EINVALID_APP_ID: u64 = 14;
-    const EINVALID_FEE: u64 = 15;
-    const EINVALID_SPEED: u64 = 16;
-    const EINVALID_SENDER: u64 = 19;
-    const EREQUEST_TOO_OLD: u64 = 20;
-    const EREQUEST_USED: u64 = 21;
-    const ENONZERO_LOCKTIME: u64 = 22;
-    const ETX_NOT_FINALIZED: u64 = 23;
-    const EALREADY_INITIALIZED: u64 = 24;
+    const EINVALID_LOCKER: u64 = 321;
+    const EINVALID_DATA_LENGTH: u64 = 322;
+    const EZERO_INPUT_AMOUNT: u64 = 323;
+    const EINVALID_APP_ID: u64 = 324;
+    const EINVALID_FEE: u64 = 325;
+    const EINVALID_SPEED: u64 = 326;
+    const EINVALID_SENDER: u64 = 327;
+    const EREQUEST_TOO_OLD: u64 = 328;
+    const EREQUEST_USED: u64 = 329;
+    const ENONZERO_LOCKTIME: u64 = 330;
+    const ETX_NOT_FINALIZED: u64 = 331;
+    const EALREADY_INITIALIZED: u64 = 332;
 
     // === Events ===
     public struct DebugEvent has copy, drop {
