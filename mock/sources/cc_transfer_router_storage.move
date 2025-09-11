@@ -26,7 +26,8 @@ module teleswap::cc_transfer_router_storage {
     }
 
     /// Structure for passing transaction and its inclusion proof
-    public struct TxAndProof has store, drop, copy {
+    public struct TxAndProof has key, store {
+        id: UID,                        // Unique identifier for object
         version: vector<u8>,           // Bitcoin transaction version
         vin: vector<u8>,              // Transaction inputs
         vout: vector<u8>,             // Transaction outputs
@@ -632,16 +633,18 @@ module teleswap::cc_transfer_router_storage {
     /// @param intermediate_nodes Merkle proof nodes
     /// @param index Transaction index in block
     /// @return New TxAndProof instance
-    public(package) fun create_tx_and_proof(
+    public fun create_tx_and_proof(
         version: vector<u8>,
         vin: vector<u8>,
         vout: vector<u8>,
         locktime: vector<u8>,
         block_number: u64,
         intermediate_nodes: vector<u8>,
-        index: u64
+        index: u64,
+        ctx: &mut TxContext
     ): TxAndProof {
         TxAndProof {
+            id: object::new(ctx),
             version,
             vin,
             vout,
@@ -650,5 +653,10 @@ module teleswap::cc_transfer_router_storage {
             intermediate_nodes,
             index
         }
+    }
+
+    public fun delete_tx_and_proof(tx_and_proof: TxAndProof) {
+        let TxAndProof { id, version: _, vin: _, vout: _, locktime: _, block_number: _, intermediate_nodes: _, index: _ } = tx_and_proof;
+        object::delete(id);
     }
 } 

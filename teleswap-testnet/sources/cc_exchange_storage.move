@@ -1,12 +1,12 @@
 #[allow(unused)]
-module teleswap::exchangestorage {
+module teleswap::cc_exchange_storage {
     use sui::table::{Self, Table};
     use sui::event;
     use sui::coin;
 
 
     use teleswap::cc_transfer_router_storage::TxAndProof;
-    use teleswap::btcrelay::{Self, BTCRelay};
+    use btcrelay::btcrelay::{Self, BTCRelay};
     use teleswap::telebtc::{Self, TELEBTC};
     // Constants
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%

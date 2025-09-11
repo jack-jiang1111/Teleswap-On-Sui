@@ -8,10 +8,10 @@ module teleswap::burn_router_storage {
     const DUST_SATOSHI_AMOUNT: u64 = 1000;
 
     // Error codes
-    const EINVALID_ADMIN: u64 = 233;
-    const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 234;
-    const EALREADY_INITIALIZED: u64 = 235;
-    const EINVALID_FEE: u64 = 236;
+    const EINVALID_ADMIN: u64 = 225;
+    const EINVALID_LOCKER_TARGET_ADDRESS: u64 = 226;
+    const EALREADY_INITIALIZED: u64 = 227;
+    const EINVALID_FEE: u64 = 228;
     // ===== STRUCTURES =====
     public struct BurnRequest has store, copy,drop {
         amount: u64,
@@ -78,14 +78,20 @@ module teleswap::burn_router_storage {
     public fun get_bitcoin_fee_oracle(burn_router: &BurnRouter): address { burn_router.bitcoin_fee_oracle }
 
     /// @notice Validates that the provided BTCRelay object is the legitimate one
+    /// @dev Compares the object ID with the stored legitimate BTCRelay ID.
+    /// This ensures that only the authorized BTCRelay instance can be used
+    /// for burn proof validation and dispute operations.
     /// @param burn_router The BurnRouter object
     /// @param btcrelay The BTCRelay object to validate
-    /// @return true if the BTCRelay is legitimate
+    /// @return true if the BTCRelay is legitimate, false otherwise
     public fun validate_btcrelay(burn_router: &BurnRouter, btcrelay: &BTCRelay): bool {
         object::id(btcrelay) == burn_router.btcrelay_object_id
     }
 
     /// @notice Gets the legitimate BTCRelay object ID
+    /// @dev Returns the stored BTCRelay object ID for validation purposes.
+    /// This ID is set during initialization and used to validate that
+    /// only the authorized BTCRelay instance is used.
     /// @param burn_router The BurnRouter object
     /// @return The legitimate BTCRelay object ID
     public fun get_btcrelay_object_id(burn_router: &BurnRouter): ID {

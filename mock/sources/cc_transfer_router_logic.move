@@ -68,6 +68,7 @@ module teleswap::cc_transfer_router_logic {
     /// @param special_teleporter Special teleporter address
     /// @param treasury Treasury address for fee collection
     /// @param locker_percentage_fee Locker fee percentage (0-10000)
+    /// @param btcrelay_object_id BTCRelay object ID
     /// @param admin Admin capability object
     /// @param ctx Transaction context
     public fun initialize(
@@ -265,7 +266,7 @@ module teleswap::cc_transfer_router_logic {
     /// @param telebtc_cap TeleBTC capability object
     /// @param treasury_cap Treasury capability object
     /// @param ctx The transaction context
-    public fun wrap(
+    public entry fun wrap(
         router: &mut CCTransferRouterCap,
         tx_and_proof: TxAndProof,
         locker_locking_script: vector<u8>,
@@ -332,6 +333,7 @@ module teleswap::cc_transfer_router_logic {
         // Process the wrap request
         let (amount,received_amount,network_fee,locker_fee,protocol_fee,third_party_fee,recipient_address) = mint_and_distribute(router, locker_cap, locker_locking_script, tx_id, telebtc_cap, treasury_cap, ctx);
        
+        cc_transfer_router_storage::delete_tx_and_proof(tx_and_proof);
         // Emit wrap completion event
         event::emit(NewWrap {
             bitcoin_tx_id: tx_id,

@@ -3,38 +3,32 @@ module teleswap::lockerstorage {
     use sui::event;
     use sui::table::{Self, Table};
     use sui::balance::{Self, Balance};
-    use sui::coin::{Self, Coin};
     use sui::sui::SUI;
     use sui::clock::{Self as clock, Clock};
-    
+    use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
+    use sui::coin::{Self, Coin, TreasuryCap};
 
     use std::bcs;
     use teleswap::price_oracle;
-    use teleswap::telebtc::{Self, TELEBTC};
-    use teleswap::wbtc::{WBTC};
+    use bridged_btc::btc::BTC;
     //debug event
     public struct DebugEvent has copy, drop {
-        num1: u64,
-        num2: u64,
-        num3: u64,
-        num4: u64,
+        num1: u256,
+        num2: u256,
+        num3: u256,
+        num4: u256,
+        num5: u256,
     }
     // ============================================================================
     // CONSTANTS
     // ============================================================================
 
     // System constants
-    const ONE_HUNDRED_PERCENT: u64 = 10000;
-    const HEALTH_FACTOR: u64 = 10000;
-    const UPPER_HEALTH_FACTOR: u64 = 12500;
-    const MAX_LOCKER_FEE: u64 = 10000;
+    const ONE_HUNDRED_PERCENT: u256 = 10000;
+    const HEALTH_FACTOR: u256 = 10000;
+    const UPPER_HEALTH_FACTOR: u256 = 12500;
+    const MAX_LOCKER_FEE: u256 = 10000;
    
-
-
-    // WBTC constants
-    const WBTC_ADDRESS: address = @wbtc;
-    //const WBTC_DECIMALS: u64 = 8;
-
     // Error constants
     const ERROR_NOT_ADMIN: u64 = 500;
     const ERROR_ALREADY_INITIALIZED: u64 = 501;
@@ -57,10 +51,10 @@ module teleswap::lockerstorage {
         locker_locking_script: vector<u8>,
         locker_script_type: u8,
         locker_rescue_script: vector<u8>,
-        collateral_token_locked_amount: u64,
-        net_minted: u64,
-        slashing_telebtc_amount: u64,
-        reserved_collateral_token_for_slash: u64,
+        collateral_token_locked_amount: u256,
+        net_minted: u256,
+        slashing_telebtc_amount: u256,
+        reserved_collateral_token_for_slash: u256,
         is_locker: bool,
         is_candidate: bool,
         is_script_hash: bool,
@@ -69,10 +63,10 @@ module teleswap::lockerstorage {
     /// Library constants for locker operations
     public struct LockersLibConstants has store, key {
         id: UID,
-        one_hundred_percent: u64,
-        health_factor: u64,
-        upper_health_factor: u64,
-        max_locker_fee: u64,
+        one_hundred_percent: u256,
+        health_factor: u256,
+        upper_health_factor: u256,
+        max_locker_fee: u256,
     }
 
     /// Admin capability for locker management
@@ -86,10 +80,10 @@ module teleswap::lockerstorage {
         id: UID,
         admin_address: address,
         paused: bool,
-        locker_percentage_fee: u64,
-        collateral_ratio: u64,
-        liquidation_ratio: u64,
-        price_with_discount_ratio: u64,
+        locker_percentage_fee: u256,
+        collateral_ratio: u256,
+        liquidation_ratio: u256,
+        price_with_discount_ratio: u256,
         total_number_of_candidates: u64,
         total_number_of_lockers: u64,
         inactivation_delay: u64,    // inactivation delay in seconds
@@ -98,9 +92,10 @@ module teleswap::lockerstorage {
         locker_leaving_acceptance: Table<address, bool>, // locker target address -> bool
         get_locker_target_address: Table<vector<u8>, address>, // locker locking script -> locker target address
         lib_constants: LockersLibConstants,
-        locker_reliability_factor: Table<address, u64>, // locker target address -> u64 (reliability factor)
+        locker_reliability_factor: Table<address, u256>, // locker target address -> u256 (reliability factor)
         // WBTC vault storage - only lockercore can access these
-        wbtc_vault: Balance<WBTC>, // WBTC collateral vault
+        wbtc_vault: Balance<BTC>, // WBTC collateral vault
+        price_modifier: u256, // price modifier
     }
 
     // ============================================================================
@@ -111,52 +106,52 @@ module teleswap::lockerstorage {
     public struct RequestAddLockerEvent has copy, drop {
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
+        collateral_token_locked_amount: u256,
     }
 
     public struct RevokeAddLockerRequestEvent has copy, drop {
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
+        collateral_token_locked_amount: u256,
     }
 
     public struct RequestInactivateLockerEvent has copy, drop {
         locker_target_address: address,
         inactivation_timestamp: u64,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
-        net_minted: u64,
+        collateral_token_locked_amount: u256,
+        net_minted: u256,
     }
 
     public struct ActivateLockerEvent has copy, drop {
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
-        net_minted: u64,
+        collateral_token_locked_amount: u256,
+        net_minted: u256,
     }
 
     public struct LockerAddedEvent has copy, drop {
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
-        reliability_factor: u64,
+        collateral_token_locked_amount: u256,
+        reliability_factor: u256,
         adding_time: u64,
     }
 
     public struct LockerRemovedEvent has copy, drop {
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_unlocked_amount: u64,
+        collateral_token_unlocked_amount: u256,
     }
 
     // Locker operation events
     public struct LockerSlashedEvent has copy, drop {
         locker_target_address: address,
-        reward_amount: u64,
+        reward_amount: u256,
         reward_recipient: address,
-        amount: u64,
+        amount: u256,
         recipient: address,
-        slashed_collateral_amount: u64,
+        slashed_collateral_amount: u256,
         slash_time: u64,
         is_for_cc_burn: bool,
     }
@@ -164,45 +159,45 @@ module teleswap::lockerstorage {
     public struct LockerLiquidatedEvent has copy, drop {
         locker_target_address: address,
         liquidator_address: address,
-        collateral_amount: u64,
-        telebtc_amount: u64,
+        collateral_amount: u256,
+        telebtc_amount: u256,
         liquidate_time: u64,
     }
 
     public struct LockerSlashedCollateralSoldEvent has copy, drop {
         locker_target_address: address,
         buyer_address: address,
-        slashing_amount: u64,
-        telebtc_amount: u64,
+        slashing_amount: u256,
+        telebtc_amount: u256,
         slashing_time: u64,
     }
 
     public struct CollateralAddedEvent has copy, drop {
         locker_target_address: address,
-        added_collateral: u64,
-        total_collateral: u64,
+        added_collateral: u256,
+        total_collateral: u256,
         adding_time: u64,
     }
 
     public struct CollateralRemovedEvent has copy, drop {
         locker_target_address: address,
-        removed_amount: u64,
-        total_collateral_amount: u64,
+        removed_amount: u256,
+        total_collateral_amount: u256,
         removing_time: u64,
     }
 
     public struct MintByLockerEvent has copy, drop {
         locker_target_address: address,
         receiver: address,
-        minted_amount: u64,
-        locker_fee: u64,
+        minted_amount: u256,
+        locker_fee: u256,
         minting_time: u64,
     }
 
     public struct BurnByLockerEvent has copy, drop {
         locker_target_address: address,
-        burnt_amount: u64,
-        locker_fee: u64,
+        burnt_amount: u256,
+        locker_fee: u256,
         burning_time: u64,
     }
 
@@ -217,48 +212,48 @@ module teleswap::lockerstorage {
     }
 
     public struct NewLockerPercentageFeeEvent has copy, drop {
-        old_locker_percentage_fee: u64,
-        new_locker_percentage_fee: u64,
+        old_locker_percentage_fee: u256,
+        new_locker_percentage_fee: u256,
     }
 
     public struct NewReliabilityFactorEvent has copy, drop {
         locker_target_address: address,
-        old_reliability_factor: u64,
-        new_reliability_factor: u64,
+        old_reliability_factor: u256,
+        new_reliability_factor: u256,
     }
 
     public struct NewPriceWithDiscountRatioEvent has copy, drop {
-        old_price_with_discount_ratio: u64,
-        new_price_with_discount_ratio: u64,
+        old_price_with_discount_ratio: u256,
+        new_price_with_discount_ratio: u256,
     }
 
 
     public struct NewCollateralRatioEvent has copy, drop {
-        old_collateral_ratio: u64,
-        new_collateral_ratio: u64,
+        old_collateral_ratio: u256,
+        new_collateral_ratio: u256,
     }
 
     public struct NewLiquidationRatioEvent has copy, drop {
-        old_liquidation_ratio: u64,
-        new_liquidation_ratio: u64,
+        old_liquidation_ratio: u256,
+        new_liquidation_ratio: u256,
     }
 
     public struct EmergencyWithdrawEvent has copy, drop {
-        amount: u64,
+        amount: u256,
         admin: address,
         epoch: u64,
     }
 
     // Deposit collateral event
     public struct DepositCollateralEvent has copy, drop {
-        amount: u64,
+        amount: u256,
         depositor: address,
         epoch: u64,
     }
 
     // Withdraw collateral event
     public struct WithdrawCollateralEvent has copy, drop {
-        amount: u64,
+        amount: u256,
         withdrawer: address,
         epoch: u64,
     }
@@ -289,10 +284,10 @@ module teleswap::lockerstorage {
     /// @param ctx The transaction context
     public fun initialize(
         admin_cap: &mut LockerAdminCap,
-        locker_percentage_fee: u64,
-        collateral_ratio: u64,
-        liquidation_ratio: u64,
-        price_with_discount_ratio: u64,
+        locker_percentage_fee: u256,
+        collateral_ratio: u256,
+        liquidation_ratio: u256,
+        price_with_discount_ratio: u256,
         ctx: &mut TxContext
     ) {
         // Check if already initialized
@@ -331,6 +326,7 @@ module teleswap::lockerstorage {
             locker_reliability_factor: table::new(ctx),
             // Initialize WBTC vault storage
             wbtc_vault: balance::zero(),
+            price_modifier: 10000,
         };
 
         // Share the locker capability object
@@ -399,7 +395,7 @@ module teleswap::lockerstorage {
         locker_locking_script: vector<u8>,
         locker_script_type: u8,
         locker_rescue_script: vector<u8>,
-        collateral_token_locked_amount: u64,
+        collateral_token_locked_amount: u256,
         ctx: &mut TxContext
     ): Locker {
         Locker {
@@ -540,7 +536,7 @@ module teleswap::lockerstorage {
     /// @notice Gets the net minted amount for a locker
     /// @param locker The locker
     /// @return The net minted amount
-    public fun get_locker_net_minted(locker: &Locker): u64 {
+    public fun get_locker_net_minted(locker: &Locker): u256 {
         locker.net_minted
     }
 
@@ -561,14 +557,14 @@ module teleswap::lockerstorage {
     /// @notice Gets slashing TeleBTC amount
     /// @param locker Reference to locker
     /// @return Slashing TeleBTC amount
-    public fun get_slashing_telebtc_amount(locker: &Locker): u64 {
+    public fun get_slashing_telebtc_amount(locker: &Locker): u256 {
         locker.slashing_telebtc_amount
     }
 
     /// @notice Gets reserved collateral token for slash
     /// @param locker Reference to locker
     /// @return Reserved collateral token for slash
-    public fun get_reserved_collateral_token_for_slash(locker: &Locker): u64 {
+    public fun get_reserved_collateral_token_for_slash(locker: &Locker): u256 {
         locker.reserved_collateral_token_for_slash
     }
 
@@ -586,42 +582,42 @@ module teleswap::lockerstorage {
     /// @notice Updates slashing TeleBTC amount
     /// @param locker Reference to locker
     /// @param new_amount New slashing TeleBTC amount
-    public(package) fun set_slashing_telebtc_amount(locker: &mut Locker, new_amount: u64) {
+    public(package) fun set_slashing_telebtc_amount(locker: &mut Locker, new_amount: u256) {
         locker.slashing_telebtc_amount = new_amount;
     }
 
     /// @notice Updates reserved collateral token for slash
     /// @param locker Reference to locker
     /// @param new_amount New reserved collateral token for slash
-    public(package) fun set_reserved_collateral_token_for_slash(locker: &mut Locker, new_amount: u64) {
+    public(package) fun set_reserved_collateral_token_for_slash(locker: &mut Locker, new_amount: u256) {
         locker.reserved_collateral_token_for_slash = new_amount;
     }
 
     /// @notice Sets collateral token locked amount
     /// @param locker The locker to update
     /// @param new_amount New collateral token locked amount
-    public(package) fun set_collateral_token_locked_amount(locker: &mut Locker, new_amount: u64) {
+    public(package) fun set_collateral_token_locked_amount(locker: &mut Locker, new_amount: u256) {
         locker.collateral_token_locked_amount = new_amount;
     }
 
     /// @notice Sets net minted amount
     /// @param locker The locker to update
     /// @param new_amount New net minted amount
-    public(package) fun set_net_minted(locker: &mut Locker, new_amount: u64) {
+    public(package) fun set_net_minted(locker: &mut Locker, new_amount: u256) {
         locker.net_minted = new_amount;
     }
 
     /// @notice Gets collateral token locked amount
     /// @param locker The locker to get amount from
     /// @return Collateral token locked amount
-    public fun get_collateral_token_locked_amount(locker: &Locker): u64 {
+    public fun get_collateral_token_locked_amount(locker: &Locker): u256 {
         locker.collateral_token_locked_amount
     }
 
     /// @notice Gets net minted amount
     /// @param locker The locker to get amount from
     /// @return Net minted amount
-    public fun get_net_minted(locker: &Locker): u64 {
+    public fun get_net_minted(locker: &Locker): u256 {
         locker.net_minted
     }
 
@@ -635,28 +631,28 @@ module teleswap::lockerstorage {
     /// @notice Gets one hundred percent from constants
     /// @param constants The constants to get value from
     /// @return One hundred percent value
-    public fun get_one_hundred_percent(constants: &LockersLibConstants): u64 {
+    public fun get_one_hundred_percent(constants: &LockersLibConstants): u256 {
         constants.one_hundred_percent
     }
 
     /// @notice Gets health factor from constants
     /// @param constants The constants to get value from
     /// @return Health factor value
-    public fun get_health_factor(constants: &LockersLibConstants): u64 {
+    public fun get_health_factor(constants: &LockersLibConstants): u256 {
         constants.health_factor
     }
 
     /// @notice Gets liquidation ratio from params
     /// @param params The params to get value from
     /// @return Liquidation ratio value
-    public fun get_liquidation_ratio(locker_cap: &LockerCap): u64 {
+    public fun get_liquidation_ratio(locker_cap: &LockerCap): u256 {
         locker_cap.liquidation_ratio
     }
 
     /// @notice Gets collateral ratio from params
     /// @param params The params to get value from
     /// @return Collateral ratio value
-    public fun get_collateral_ratio(locker_cap: &LockerCap): u64 {
+    public fun get_collateral_ratio(locker_cap: &LockerCap): u256 {
         locker_cap.collateral_ratio
     }
 
@@ -670,28 +666,28 @@ module teleswap::lockerstorage {
     /// @notice Gets locker percentage fee
     /// @param locker_cap The locker capability object
     /// @return Locker percentage fee
-    public fun locker_percentage_fee(locker_cap: &LockerCap): u64 {
+    public fun locker_percentage_fee(locker_cap: &LockerCap): u256 {
         locker_cap.locker_percentage_fee
     }
 
     /// @notice Gets collateral ratio
     /// @param locker_cap The locker capability object
     /// @return Collateral ratio
-    public fun collateral_ratio(locker_cap: &LockerCap): u64 {
+    public fun collateral_ratio(locker_cap: &LockerCap): u256 {
         locker_cap.collateral_ratio
     }
 
     /// @notice Gets liquidation ratio
     /// @param locker_cap The locker capability object
     /// @return Liquidation ratio
-    public fun liquidation_ratio(locker_cap: &LockerCap): u64 {
+    public fun liquidation_ratio(locker_cap: &LockerCap): u256 {
         locker_cap.liquidation_ratio
     }
 
     /// @notice Gets price with discount ratio
     /// @param locker_cap The locker capability object
     /// @return Price with discount ratio
-    public fun price_with_discount_ratio(locker_cap: &LockerCap): u64 {
+    public fun price_with_discount_ratio(locker_cap: &LockerCap): u256 {
         locker_cap.price_with_discount_ratio
     }
 
@@ -844,7 +840,7 @@ module teleswap::lockerstorage {
     /// @param locker_cap The locker capability object
     /// @param locker_target_address The target address of the locker
     /// @return The reliability factor for the locker
-    public fun get_reliability_factor(locker_cap: &LockerCap, locker_target_address: address): u64 {
+    public fun get_reliability_factor(locker_cap: &LockerCap, locker_target_address: address): u256 {
         assert!(table::contains(&locker_cap.locker_reliability_factor, locker_target_address), ERROR_INVALID_GET);
         *table::borrow(&locker_cap.locker_reliability_factor, locker_target_address)
     }
@@ -852,15 +848,15 @@ module teleswap::lockerstorage {
     /// @notice Gets the WBTC collateral balance of the locker contract
     /// @param locker_cap The locker capability object
     /// @return The WBTC collateral balance
-    public fun get_wbtc_collateral_balance(locker_cap: &LockerCap): u64 {
-        balance::value(&locker_cap.wbtc_vault)
+    public fun get_wbtc_collateral_balance(locker_cap: &LockerCap): u256 {
+        balance::value(&locker_cap.wbtc_vault) as u256
     }
 
     /// @notice Gets the collateral balance of the locker contract for a specific token
     /// @param locker_cap The locker capability object
     /// @param locker_target_address The target address (including SUI @0x1)
     /// @return The collateral balance
-    public fun get_locker_collateral_token_balance(locker_cap: &LockerCap, locker_target_address: address): u64 {
+    public fun get_locker_collateral_token_balance(locker_cap: &LockerCap, locker_target_address: address): u256 {
         let locker = get_locker_from_mapping(locker_cap, locker_target_address);
         locker.collateral_token_locked_amount
     }
@@ -889,22 +885,21 @@ module teleswap::lockerstorage {
     public fun calculate_health_factor(
         locker_target_address: address,
         locker_cap: &mut LockerCap,
-        _reliability_factor: u64
-    ): u64 {
-        
+        _reliability_factor: u256
+    ): u256 {
+
         let one_hundred_percent = locker_cap.lib_constants.one_hundred_percent;
         let liquidation_ratio = locker_cap.liquidation_ratio;
+        let price_modifier = locker_cap.price_modifier;// default 100% since wbtc is 1:1 with telebtc
 
         let the_locker = get_mut_locker_from_mapping(locker_cap, locker_target_address);
-        let numerator = the_locker.collateral_token_locked_amount * 
-                       one_hundred_percent * 
+        let numerator = (price_modifier * the_locker.collateral_token_locked_amount) * 
                        (one_hundred_percent * one_hundred_percent);
         
-        let denominator = 1+ the_locker.net_minted * 
-                         liquidation_ratio * 
-                         _reliability_factor;
-        
-        numerator / denominator
+        let denominator = 1+ (the_locker.net_minted) * 
+                         (liquidation_ratio) * 
+                         (_reliability_factor);
+        (numerator / denominator)
     }
 
     /// @notice Calculates needed TeleBTC to buy collateral
@@ -914,11 +909,11 @@ module teleswap::lockerstorage {
     /// @return Amount of TeleBTC needed
     public fun needed_telebtc_to_buy_collateral(
         locker_cap: &LockerCap,
-        _collateral_amount: u64,
-        _price_of_collateral: u64
-    ): u64 {
+        _collateral_amount: u256,
+        _price_of_collateral: u256
+    ): u256 {
         let numerator = _collateral_amount * _price_of_collateral * locker_cap.price_with_discount_ratio;
-        let denominator = locker_cap.lib_constants.one_hundred_percent * std::u64::pow(10, 8);
+        let denominator = locker_cap.lib_constants.one_hundred_percent * std::u256::pow(10, 8);
         numerator / denominator
     }
     
@@ -929,11 +924,9 @@ module teleswap::lockerstorage {
     /// @return Price in BTC
     public fun price_of_one_unit_of_collateral_in_btc(
         locker_cap: &LockerCap
-    ): u64 {    
-        // Call price oracle to get equivalent output amount
-        // This calls the price oracle's equivalentOutputAmount function
-        // with 1 unit of collateral (10^collateral_decimal) as input
-        1
+    ): u256 {
+        // by deafult this should return 10^8, represent 1 WBTC     
+        std::u256::pow(10, 8) * locker_cap.price_modifier /locker_cap.lib_constants.one_hundred_percent
     }
 
     /// @notice Gets locker capacity
@@ -943,25 +936,22 @@ module teleswap::lockerstorage {
     /// @param _locker_reliability_factor Locker reliability factor
     /// @return Locker capacity
     public fun get_locker_capacity(
-        the_locker: &Locker,
         locker_cap: &LockerCap,
         _locker_target_address: address,
     ): u256 {
         // Check if locker target address is not zero
         assert!(_locker_target_address != @0x0, ERROR_ZERO_ADDRESS);
+        let the_locker = get_locker_from_mapping(locker_cap, _locker_target_address);
+
+        let _locker_reliability_factor = get_reliability_factor(locker_cap, _locker_target_address);
+        let locker_collateral_in_telebtc = (the_locker.collateral_token_locked_amount) * 
+                                          (locker_cap.lib_constants.one_hundred_percent) * 
+                                          (locker_cap.lib_constants.one_hundred_percent) / 
+                                          ((locker_cap.collateral_ratio) * (_locker_reliability_factor));
         
-        let price_of_one_unit_of_collateral = price_of_one_unit_of_collateral_in_btc(
-            locker_cap
-        );
-        let _locker_reliability_factor = get_reliability_factor(locker_cap, _locker_target_address) as u256;
-        let locker_collateral_in_telebtc = (price_of_one_unit_of_collateral as u256) * 
-                                          (the_locker.collateral_token_locked_amount as u256) * 
-                                          (locker_cap.lib_constants.one_hundred_percent as u256) * 
-                                          (locker_cap.lib_constants.one_hundred_percent as u256) / 
-                                          ((locker_cap.collateral_ratio as u256) * (_locker_reliability_factor as u256));
         // unit is in satoshi 
-        if (locker_collateral_in_telebtc > (the_locker.net_minted as u256)) {
-            locker_collateral_in_telebtc - (the_locker.net_minted as u256)
+        if (locker_collateral_in_telebtc > (the_locker.net_minted)) {
+            locker_collateral_in_telebtc - (the_locker.net_minted)
         } else {
             0
         }
@@ -976,9 +966,9 @@ module teleswap::lockerstorage {
     public fun maximum_buyable_collateral(
         locker_target_address: address,
         locker_cap: &mut LockerCap,
-        _price_of_one_unit_of_collateral: u64,
-        _reliability_factor: u64
-    ): u64 {
+        _price_of_one_unit_of_collateral: u256,
+        _reliability_factor: u256
+    ): u256 {
         // Extract all values from locker_cap before getting mutable reference
         let upper_health_factor = locker_cap.lib_constants.upper_health_factor;
         let one_hundred_percent = locker_cap.lib_constants.one_hundred_percent;
@@ -987,24 +977,24 @@ module teleswap::lockerstorage {
         
         let telebtc_decimal: u8 = 8;
         let the_locker = get_mut_locker_from_mapping(locker_cap, locker_target_address);
-        let antecedent = ((upper_health_factor * 
-                          the_locker.net_minted * 
-                          liquidation_ratio * 
-                          _reliability_factor * 
-                                                     std::u64::pow(10, 8)) / one_hundred_percent) - 
-                        (the_locker.collateral_token_locked_amount * 
-                         _price_of_one_unit_of_collateral * 
-                         std::u64::pow(10, telebtc_decimal));
+        let antecedent = ((upper_health_factor ) * 
+                          (the_locker.net_minted ) * 
+                          (liquidation_ratio ) * 
+                          (_reliability_factor ) * 
+                          (std::u256::pow(10, 8))) / (one_hundred_percent) - 
+                        ((the_locker.collateral_token_locked_amount) * 
+                         (_price_of_one_unit_of_collateral) * 
+                         (std::u256::pow(10, telebtc_decimal)));
         
-        let consequent = ((upper_health_factor * 
-                          liquidation_ratio * 
-                          _reliability_factor * 
-                          _price_of_one_unit_of_collateral * 
-                          price_with_discount_ratio) / 
-                         (one_hundred_percent * one_hundred_percent)) - 
-                        (_price_of_one_unit_of_collateral * std::u64::pow(10, telebtc_decimal));
+        let consequent = ((upper_health_factor) * 
+                          (liquidation_ratio) * 
+                          (_reliability_factor) * 
+                          (_price_of_one_unit_of_collateral) * 
+                          (price_with_discount_ratio)) / 
+                         ((one_hundred_percent) * (one_hundred_percent)) - 
+                        ((_price_of_one_unit_of_collateral) * (std::u256::pow(10, telebtc_decimal)));
         
-        antecedent / consequent
+        (antecedent / consequent)
     }
 
     // ============================================================================
@@ -1021,8 +1011,8 @@ module teleswap::lockerstorage {
     public(package) fun emit_mint_by_locker_event(
         locker_target_address: address,
         receiver: address,
-        minted_amount: u64,
-        locker_fee: u64,
+        minted_amount: u256,
+        locker_fee: u256,
         minting_time: u64
     ) {
         event::emit(MintByLockerEvent {
@@ -1042,8 +1032,8 @@ module teleswap::lockerstorage {
     /// @param burning_time Timestamp when the burning occurred
     public(package) fun emit_burn_by_locker_event(
         locker_target_address: address,
-        burnt_amount: u64,
-        locker_fee: u64,
+        burnt_amount: u256,
+        locker_fee: u256,
         burning_time: u64
     ) {
         event::emit(BurnByLockerEvent {
@@ -1065,11 +1055,11 @@ module teleswap::lockerstorage {
     /// @param is_for_cc_burn Whether it's for CC burn
     public(package) fun emit_locker_slashed_event(
         locker_target_address: address,
-        reward_amount: u64,
+        reward_amount: u256,
         reward_recipient: address,
-        amount: u64,
+        amount: u256,
         recipient: address,
-        slashed_collateral_amount: u64,
+        slashed_collateral_amount: u256,
         slash_time: u64,
         is_for_cc_burn: bool
     ) {
@@ -1094,8 +1084,8 @@ module teleswap::lockerstorage {
     public(package) fun emit_locker_liquidated_event(
         locker_target_address: address,
         liquidator_address: address,
-        collateral_amount: u64,
-        telebtc_amount: u64,
+        collateral_amount: u256,
+        telebtc_amount: u256,
         liquidate_time: u64
     ) {
         event::emit(LockerLiquidatedEvent {
@@ -1116,8 +1106,8 @@ module teleswap::lockerstorage {
     public(package) fun emit_locker_slashed_collateral_sold_event(
         locker_target_address: address,
         buyer_address: address,
-        slashing_amount: u64,
-        telebtc_amount: u64,
+        slashing_amount: u256,
+        telebtc_amount: u256,
         slashing_time: u64
     ) {
         event::emit(LockerSlashedCollateralSoldEvent {
@@ -1134,7 +1124,7 @@ module teleswap::lockerstorage {
     /// @param admin The admin address
     /// @param epoch The epoch
     public(package) fun emit_emergency_withdraw_event(
-        amount: u64,
+        amount: u256,
         admin: address,
         epoch: u64
     ) {
@@ -1150,7 +1140,7 @@ module teleswap::lockerstorage {
     /// @param depositor The depositor address
     /// @param epoch The epoch
     public(package) fun emit_deposit_collateral_event(
-        amount: u64,
+        amount: u256,
         depositor: address,
         epoch: u64
     ) {
@@ -1166,7 +1156,7 @@ module teleswap::lockerstorage {
     /// @param withdrawer The withdrawer address
     /// @param epoch The epoch
     public(package) fun emit_withdraw_collateral_event(
-        amount: u64,
+        amount: u256,
         withdrawer: address,
         epoch: u64
     ) {
@@ -1183,7 +1173,7 @@ module teleswap::lockerstorage {
     public(package) fun emit_request_add_locker_event(
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
+        collateral_token_locked_amount: u256,
     ) {
         event::emit(RequestAddLockerEvent {
             locker_target_address,
@@ -1199,7 +1189,7 @@ module teleswap::lockerstorage {
     public(package) fun emit_revoke_add_locker_request_event(
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
+        collateral_token_locked_amount: u256,
     ) {
         event::emit(RevokeAddLockerRequestEvent {
             locker_target_address,
@@ -1218,8 +1208,8 @@ module teleswap::lockerstorage {
         locker_target_address: address,
         inactivation_timestamp: u64,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
-        net_minted: u64,
+        collateral_token_locked_amount: u256,
+        net_minted: u256,
     ) {
         event::emit(RequestInactivateLockerEvent {
             locker_target_address,
@@ -1238,8 +1228,8 @@ module teleswap::lockerstorage {
     public(package) fun emit_activate_locker_event(
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
-        net_minted: u64,
+        collateral_token_locked_amount: u256,
+        net_minted: u256,
     ) {
         event::emit(ActivateLockerEvent {
             locker_target_address,
@@ -1258,8 +1248,8 @@ module teleswap::lockerstorage {
     public(package) fun emit_locker_added_event(
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_locked_amount: u64,
-        reliability_factor: u64,
+        collateral_token_locked_amount: u256,
+        reliability_factor: u256,
         adding_time: u64,
     ) {
         event::emit(LockerAddedEvent {
@@ -1278,7 +1268,7 @@ module teleswap::lockerstorage {
     public(package) fun emit_locker_removed_event(
         locker_target_address: address,
         locker_locking_script: vector<u8>,
-        collateral_token_unlocked_amount: u64,
+        collateral_token_unlocked_amount: u256,
     ) {
         event::emit(LockerRemovedEvent {
             locker_target_address,
@@ -1294,8 +1284,8 @@ module teleswap::lockerstorage {
     /// @param adding_time The adding time
     public(package) fun emit_collateral_added_event(
         locker_target_address: address,
-        added_collateral: u64,
-        total_collateral: u64,
+        added_collateral: u256,
+        total_collateral: u256,
         adding_time: u64,
     ) {
         event::emit(CollateralAddedEvent {
@@ -1314,8 +1304,8 @@ module teleswap::lockerstorage {
     /// @param timestamp Timestamp when the collateral was removed
     public(package) fun emit_collateral_removed_event(
         locker_target_address: address,
-        removed_amount: u64,
-        total_collateral_amount: u64,
+        removed_amount: u256,
+        total_collateral_amount: u256,
         removing_time: u64,
     ) {
         event::emit(CollateralRemovedEvent {
@@ -1338,7 +1328,7 @@ module teleswap::lockerstorage {
     public fun set_locker_percentage_fee(
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
-        _locker_percentage_fee: u64,
+        _locker_percentage_fee: u256,
         ctx: &mut TxContext
     ) {
         // Check admin permissions
@@ -1365,7 +1355,7 @@ module teleswap::lockerstorage {
     public fun set_price_with_discount_ratio(
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
-        _price_with_discount_ratio: u64,
+        _price_with_discount_ratio: u256,
         ctx: &mut TxContext
     ) {
         // Check admin permissions
@@ -1394,7 +1384,7 @@ module teleswap::lockerstorage {
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
         _locker_target_address: address,
-        _reliability_factor: u64,
+        _reliability_factor: u256,
         ctx: &mut TxContext
     ) {
         // Check admin permissions
@@ -1432,7 +1422,7 @@ module teleswap::lockerstorage {
     public fun set_collateral_ratio(
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
-        _collateral_ratio: u64,
+        _collateral_ratio: u256,
         ctx: &mut TxContext
     ) {
         // Check admin permissions
@@ -1459,7 +1449,7 @@ module teleswap::lockerstorage {
     public fun set_liquidation_ratio(
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
-        _liquidation_ratio: u64,
+        _liquidation_ratio: u256,
         ctx: &mut TxContext
     ) {
         // Check admin permissions
@@ -1497,14 +1487,14 @@ module teleswap::lockerstorage {
     /// @notice Adds WBTC collateral to the locker contract (only lockercore can call)
     /// @param locker_cap The locker capability object
     /// @param coins The WBTC coins to add
-    public(package) fun add_wbtc_collateral_to_contract(locker_cap: &mut LockerCap, coins: Coin<WBTC>) {
+    public(package) fun add_wbtc_collateral_to_contract(locker_cap: &mut LockerCap, coins: Coin<BTC>) {
         // Add WBTC coins to the vault
-        let coin_value = coin::value(&coins);
+        let coin_value = coin::value(&coins) as u256;
         balance::join(&mut locker_cap.wbtc_vault, coin::into_balance(coins));
         
         // Emit deposit event
         event::emit(DepositCollateralEvent {
-            amount: coin_value,
+            amount: coin_value as u256,
             depositor: @0x0, // placeholder for telebtc address
             epoch: 0, // placeholder for epoch
         });
@@ -1515,12 +1505,12 @@ module teleswap::lockerstorage {
     /// @param amount Amount of WBTC to remove from the vault
     /// @param ctx Transaction context
     /// @return The removed WBTC coins
-    public(package) fun remove_wbtc_collateral_from_contract(locker_cap: &mut LockerCap, amount: u64, ctx: &mut TxContext): Coin<WBTC> {
+    public(package) fun remove_wbtc_collateral_from_contract(locker_cap: &mut LockerCap, amount: u256, ctx: &mut TxContext): Coin<BTC> {
         // Check if vault has sufficient balance
-        assert!(balance::value(&locker_cap.wbtc_vault) >= amount, ERROR_INSUFFICIENT_VAULT_BALANCE);
+        assert!((balance::value(&locker_cap.wbtc_vault) as u256) >= amount, ERROR_INSUFFICIENT_VAULT_BALANCE);
         
         // Split coins from vault
-        let coins = coin::from_balance(balance::split(&mut locker_cap.wbtc_vault, amount), ctx);
+        let coins = coin::from_balance(balance::split(&mut locker_cap.wbtc_vault, amount as u64), ctx);
         
         // Emit withdraw event
         event::emit(WithdrawCollateralEvent {
@@ -1530,46 +1520,5 @@ module teleswap::lockerstorage {
         });
         
         coins
-    }
-
-
-
-    /// @notice Sets the slashing TeleBTC amount for a locker
-    /// @param locker The locker
-    /// @param new_amount New slashing TeleBTC amount
-    public(package) fun set_locker_slashing_telebtc_amount(locker: &mut Locker, new_amount: u64) {
-        locker.slashing_telebtc_amount = new_amount;
-    }
-
-    /// @notice Gets the slashing TeleBTC amount for a locker
-    /// @param locker The locker
-    /// @return The slashing TeleBTC amount
-    public(package) fun get_locker_slashing_telebtc_amount(locker: &Locker): u64 {
-        locker.slashing_telebtc_amount
-    }
-
-    /// @notice Sets the reserved collateral for slash for a locker
-    /// @param locker The locker
-    /// @param new_amount New reserved collateral for slash
-    public(package) fun set_locker_reserved_collateral_for_slash(locker: &mut Locker, new_amount: u64) {
-        locker.reserved_collateral_token_for_slash = new_amount;
-    }
-
-    /// @notice Gets the reserved collateral for slash for a locker
-    /// @param locker The locker
-    /// @return The reserved collateral for slash
-    public(package) fun get_locker_reserved_collateral_for_slash(locker: &Locker): u64 {
-        locker.reserved_collateral_token_for_slash
-    }
-
-    
-    // Test only functions, will need to be removed in real deployment
-    /// @notice Sets net minted amount
-    /// @param locker The locker to update
-    /// @param new_amount New net minted amount
-    public fun set_net_minted_admin(admin_cap: &LockerAdminCap, locker_cap: &mut LockerCap, new_amount: u64,locker_target_address: address, ctx: &mut TxContext) {
-        assert_admin(admin_cap, locker_cap, ctx);
-        let locker = table::borrow_mut(&mut locker_cap.lockers_mapping, locker_target_address);
-        locker.net_minted = new_amount;
     }
 } 

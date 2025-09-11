@@ -1,8 +1,7 @@
-The mock version is for local test only. comment out all the depenecy
-We added lots of test only function which will be removed in the real time implementation
-
-Also the btcrelay is in seperate module in mainnet deployment
-
+Testnet version
+Only btcrelay is a mock version (accpect any tx)
+wbtc,usdt,usdc,sui are pre defined contract on chain
+The other are the same as the mainnet
 
 Error code:
 btcrelay 0-100
@@ -14,6 +13,7 @@ burn_router_locker_connector 231-240
 transfer_storage 310-320
 transfer_logic 320-335
 telebtc 400-410
+request_parser 411-420
 dex_connector 421-431
 locker_storage 500-510
 locker_manager 510-520
@@ -23,5 +23,7 @@ exchange_store 600-610
 exchange_logic 611-630
 
 
-
+deploy scripts:
+1. btcrelay contract
+2. usdc,usdt,wbtc contract
 

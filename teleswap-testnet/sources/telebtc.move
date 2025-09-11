@@ -1,5 +1,7 @@
 #[allow(unused)]
 module teleswap::telebtc {
+    // This is a mock contract for the telebtc contract
+    // any address can mint and burn telebtc
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::table::{Self, Table};
     use sui::package::{Self, UpgradeCap};
@@ -19,7 +21,7 @@ module teleswap::telebtc {
 
 
     // Constants
-    const INITIAL_MINT_LIMIT: u64 = 100000000; // 10^8
+    const INITIAL_MINT_LIMIT: u64 = 100000000000; // 10^11
 
     public struct TELEBTC has drop {}
 
@@ -42,7 +44,6 @@ module teleswap::telebtc {
     }
 
     public struct MintEvent has copy, drop {
-        receiver: address,
         amount: u64
     }
 
@@ -160,7 +161,6 @@ module teleswap::telebtc {
     public(package) fun mint(
         cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
-        receiver: address,
         amount: u64,
         ctx: &mut TxContext
     ): Coin<TELEBTC> {
@@ -169,7 +169,7 @@ module teleswap::telebtc {
         assert!(check_and_reduce_mint_limit(cap, amount, ctx), EEPOCH_MINT_LIMIT_REACHED);
         
         let coins = coin::mint(treasury_cap, amount, ctx);
-        event::emit(MintEvent {receiver, amount });
+        event::emit(MintEvent { amount });
         coins
     }
 
@@ -178,7 +178,9 @@ module teleswap::telebtc {
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         coins: Coin<TELEBTC>,
         ctx: &mut TxContext
-    ):bool {        
+    ):bool {
+        let amount = coin::value(&coins);
+        
         let burned_amount = coin::burn(treasury_cap, coins);
         event::emit(BurnEvent { amount: burned_amount });
         true
@@ -261,11 +263,5 @@ module teleswap::telebtc {
         } else {
             false
         }
-    }
-
-    /// Returns a zero value TeleBTC coin
-    /// This is useful for testing and when you need to provide a coin with zero value
-    public fun zero_coin(ctx: &mut TxContext): Coin<TELEBTC> {
-        coin::zero(ctx)
     }
 } 

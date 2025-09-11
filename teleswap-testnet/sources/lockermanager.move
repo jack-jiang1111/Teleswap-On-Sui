@@ -6,7 +6,7 @@ module teleswap::lockermanager {
     use teleswap::lockerhelper::{Self};
     use teleswap::telebtc::{Self, TELEBTC, TeleBTCCap};
     use sui::coin::{Self, Coin, TreasuryCap};
-    use teleswap::wbtc::WBTC;
+    use bridged_btc::btc::BTC;
     use sui::clock::{Clock};
 
     // Error constants
@@ -20,8 +20,6 @@ module teleswap::lockermanager {
     const ERROR_INSUFFICIENT_FUNDS: u64 = 517;
     const ERROR_ALREADY_REQUESTED: u64 = 518;
     const ERROR_MORE_THAN_MAX_REMOVABLE_COLLATERAL: u64 = 519;
-
-    const WBTC_ADDRESS: address = @wbtc;
 
     // debug event
     public struct DebugEvent has copy, drop {
@@ -43,13 +41,13 @@ module teleswap::lockermanager {
     public fun request_to_become_locker(
         locker_cap: &mut LockerCap,
         _locker_locking_script: vector<u8>,
-        wbtc_coins: Coin<WBTC>,
+        wbtc_coins: Coin<BTC>,
         _locker_script_type: u8,
         _locker_rescue_script: vector<u8>,
         ctx: &mut TxContext
     ): bool {
         let sender = tx_context::sender(ctx);
-        let wbtc_amount = coin::value(&wbtc_coins);
+        let wbtc_amount = coin::value(&wbtc_coins) as u256;
         assert!(wbtc_amount != 0, ERROR_ZERO_VALUE);
         
         // Call the helper function to handle the locker creation logic
@@ -133,7 +131,7 @@ module teleswap::lockermanager {
         admin_cap: &LockerAdminCap,
         locker_cap: &mut LockerCap,
         _locker_target_address: address,
-        _locker_reliability_factor: u64,
+        _locker_reliability_factor: u256,
         ctx: &mut TxContext
     ): bool {
         // Check admin permissions
@@ -305,7 +303,7 @@ module teleswap::lockermanager {
         // Get information from the_locker before releasing the borrow
         let locker_locking_script = lockerstorage::get_locker_locking_script(the_locker);
         let net_minted = lockerstorage::get_locker_net_minted(the_locker);
-        let slashing_telebtc_amount = lockerstorage::get_locker_slashing_telebtc_amount(the_locker);
+        let slashing_telebtc_amount = lockerstorage::get_slashing_telebtc_amount(the_locker);
         let collateral_amount = lockerstorage::get_collateral_token_locked_amount(the_locker);
         let reserved_collateral_for_slash = lockerstorage::get_reserved_collateral_token_for_slash(the_locker);
         
@@ -316,7 +314,7 @@ module teleswap::lockermanager {
         if (coin::value(&telebtc_coins) == 0) {
             assert!(net_minted == 0, ERROR_INSUFFICIENT_FUNDS);
         } else {
-            assert!(coin::value(&telebtc_coins) == net_minted, ERROR_INSUFFICIENT_FUNDS); 
+            assert!(coin::value(&telebtc_coins) as u256 == net_minted, ERROR_INSUFFICIENT_FUNDS); 
         };
         let burn_success = telebtc::burn(telebtc_cap, treasury_cap, telebtc_coins, ctx);
         assert!(burn_success, ERROR_BURN_FAILED);
@@ -364,14 +362,14 @@ module teleswap::lockermanager {
     public fun add_collateral(
         locker_cap: &mut LockerCap,
         _locker_target_address: address,
-        wbtc_coins: Coin<WBTC>,
+        wbtc_coins: Coin<BTC>,
         ctx: &mut TxContext
     ): bool {
         // Check if locker target address is not zero
         assert!(_locker_target_address != @0x0, ERROR_ZERO_ADDRESS);
         
         // Check if WBTC coins amount is not zero
-        let wbtc_amount = coin::value(&wbtc_coins);
+        let wbtc_amount = coin::value(&wbtc_coins) as u256;
         assert!(wbtc_amount != 0, ERROR_ZERO_VALUE);
         
         // check if the sender is the locker
@@ -408,7 +406,7 @@ module teleswap::lockermanager {
     /// @return True if collateral is removed successfully
     public fun remove_collateral(
         locker_cap: &mut LockerCap,
-        _removing_collateral_token_amount: u64,
+        _removing_collateral_token_amount: u256,
         clock: &Clock,
         ctx: &mut TxContext
     ): bool {
@@ -431,8 +429,8 @@ module teleswap::lockermanager {
         
         // get the capacity: simple version: total collateral - net minted
         // capacity's unit is in satoshi
-        let capacity = lockerstorage::get_locker_capacity(the_locker, locker_cap, sender);
-        assert!(_removing_collateral_token_amount as u256 <= capacity as u256, ERROR_MORE_THAN_MAX_REMOVABLE_COLLATERAL);
+        let capacity = lockerstorage::get_locker_capacity(locker_cap, sender);
+        assert!(_removing_collateral_token_amount  <= capacity , ERROR_MORE_THAN_MAX_REMOVABLE_COLLATERAL);
         
         // this the mutable version of the locker
         let mut_locker = lockerstorage::get_mut_locker_from_mapping(locker_cap, sender);

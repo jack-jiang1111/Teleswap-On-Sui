@@ -3,13 +3,13 @@ module teleswap::burn_router_logic {
     use sui::table::{Self, Table};
     use teleswap::burn_router_storage::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
     use teleswap::burn_router_helper::{Self};
-    use teleswap::bitcoin_helper::{Self};    
-    use teleswap::btcrelay::{Self,BTCRelay};
+    use btcrelay::bitcoin_helper::{Self};    
+    use btcrelay::btcrelay::{Self,BTCRelay};
     use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
     use sui::coin::{Self, Coin, TreasuryCap};
     use teleswap::lockerstorage::{Self, LockerCap};
     use teleswap::burn_router_locker_connector::{Self};
-    use teleswap::wbtc::{Self, WBTC};
+    use bridged_btc::btc::BTC;
     use sui::sui::SUI;
     use usdc::usdc::USDC;
     use bridged_usdt::usdt::USDT;
@@ -205,9 +205,9 @@ module teleswap::burn_router_logic {
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
-        pool_usdc_wbtc: &mut pool::Pool<USDC, WBTC>,
-        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, WBTC>,
-        wbtc_coin: Coin<WBTC>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
+        wbtc_coin: Coin<BTC>,
         sui_coin: Coin<SUI>,
         usdt_coin: Coin<USDT>,
         usdc_coin: Coin<USDC>,
@@ -292,7 +292,7 @@ module teleswap::burn_router_logic {
         );
 
         // Get the Locker target address
-        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
         
         // Validate caller is locker or oracle
         let caller = ctx.sender();
@@ -376,10 +376,10 @@ module teleswap::burn_router_logic {
     ) {
         burn_router_storage::assert_admin(tx_context::sender(ctx), burn_router);
         // Check if the locking script is valid
-        assert!(lockerstorage::is_locker_mock(locker_locking_script,locker_cap), EINVALID_LOCKER);
+        assert!(lockerstorage::is_locker(locker_cap,locker_locking_script), EINVALID_LOCKER);
 
         // Get the target address of the locker from its locking script
-        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
 
         let len = vector::length(&indices);
         let mut i = 0u64;
@@ -402,14 +402,15 @@ module teleswap::burn_router_logic {
             let amount = burn_router_storage::get_amount(&request);
             let sender = burn_router_storage::get_sender(&request);
 
-            // Call dummy locker slashing 
-            lockerstorage::slash_idle_locker_mock(
+            // Call burn_router_locker_connector slashing 
+            burn_router_locker_connector::slash_idle_locker(
                 locker_target_address,
                 amount, // slasher reward 
                 tx_context::sender(ctx), // slasher address
                 amount, // total amount
                 sender, // user address
-                locker_cap
+                locker_cap,
+                ctx
             );
 
             // Emit BurnDispute event (define if needed)
@@ -525,12 +526,13 @@ module teleswap::burn_router_logic {
             locker_locking_script,
             locker_cap
         );
-        lockerstorage::slash_thief_locker_mock(
+        burn_router_locker_connector::slash_thief_locker(
             locker_target_address,
             slasher_reward,
             tx_context::sender(ctx),
             total_value,
-            locker_cap
+            locker_cap,
+            ctx
         );
         let total_value_slashed = total_value + slasher_reward;
         let event = LockerDispute {
@@ -547,11 +549,11 @@ module teleswap::burn_router_logic {
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
-        pool_usdc_wbtc: &mut pool::Pool<USDC, WBTC>,
-        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, WBTC>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
         input_amount: u64,
         min_output_amount: u64,
-        wbtc_coin: Coin<WBTC>,
+        wbtc_coin: Coin<BTC>,
         sui_coin: Coin<SUI>,
         usdt_coin: Coin<USDT>,
         usdc_coin: Coin<USDC>,

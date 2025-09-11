@@ -1,15 +1,13 @@
 [package]
-name = "teleswap"
+name = "bridged_usdt"
 version = "0.0.1"
-edition = "2024"
+
 
 [dependencies]
 MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", rev = "e54b798790ed", subdir = "crates/sui-framework/packages/move-stdlib", override = true }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "e54b798790ed", override = true }
 
 [addresses]
-teleswap = "0x0"
-sui = "0x2"
-wbtc = "0x0"
+bridged_usdt = "0x0"
 
 

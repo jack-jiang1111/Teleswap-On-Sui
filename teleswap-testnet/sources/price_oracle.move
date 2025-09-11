@@ -137,12 +137,12 @@ module teleswap::price_oracle {
     /// @param _output_token Output token address
     /// @return Equivalent output amount
     public fun equivalent_output_amount_by_average(
-        _input_amount: u64,
+        _input_amount: u256,
         _input_decimals: u8,
         _output_decimals: u8,
         _input_token: address,
         _output_token: address
-    ): u64 {
+    ): u256 {
         // Dummy implementation - return input amount
         _input_amount
     }
@@ -155,12 +155,12 @@ module teleswap::price_oracle {
     /// @param _output_token Output token address
     /// @return Equivalent output amount
     public fun equivalent_output_amount(
-        _input_amount: u64,
+        _input_amount: u256,
         _input_decimals: u8,
         _output_decimals: u8,
         _input_token: address,
         _output_token: address
-    ): u64 {
+    ): u256 {
         // Dummy implementation - return input amount
         _input_amount
     }
@@ -173,12 +173,12 @@ module teleswap::price_oracle {
     /// @param _output_token Output token address
     /// @return Equivalent output amount
     public fun equivalent_output_amount_from_oracle(
-        _input_amount: u64,
+        _input_amount: u256,
         _input_decimals: u8,
         _output_decimals: u8,
         _input_token: address,
         _output_token: address
-    ): u64 {
+    ): u256 {
         // Dummy implementation - return input amount
         _input_amount
     }
@@ -191,10 +191,10 @@ module teleswap::price_oracle {
     /// @return Equivalent output amount
     public fun equivalent_output_amount_from_exchange(
         _exchange_router: address,
-        _input_amount: u64,
+        _input_amount: u256,
         _input_token: address,
         _output_token: address
-    ): u64 {
+    ): u256 {
         // Dummy implementation - return input amount
         _input_amount
     }

@@ -16,41 +16,13 @@ module teleswap::burn_router_locker_connector {
     const DUST_SATOSHI_AMOUNT: u64 = 1000;
     
     // Error codes
-    const EZERO_ADDRESS: u64 = 200;
-    const ENOT_ORACLE: u64 = 201;
-    const ELOW_STARTING_BLOCK: u64 = 202;
-    const EINVALID_FEE: u64 = 203;
-    const EINVALID_REWARD: u64 = 204;
-    const ELOW_DEADLINE: u64 = 205;
-    const ENOT_LOCKER: u64 = 512;
-    const ETRANSFER_FAILED: u64 = 207;
-    const EEXCHANGE_FAILED: u64 = 208;
-    const EINVALID_PATH: u64 = 209;
-    const EWRONG_AMOUNTS: u64 = 210;
-    const EINVALID_AMOUNT: u64 = 211;
-    const ELOW_FEE: u64 = 212;
-    const EFEE_TRANSFER_FAILED: u64 = 213;
-    const ETHIRD_PARTY_FEE_TRANSFER_FAILED: u64 = 214;
-    const ENETWORK_FEE_TRANSFER_FAILED: u64 = 215;
-    const EALREADY_PAID: u64 = 216;
-    const EDEADLINE_NOT_PASSED: u64 = 217;
-    const EOLD_REQUEST: u64 = 218;
-    const EWRONG_INPUTS: u64 = 219;
-    const ENOT_FINALIZED: u64 = 220;
-    const EALREADY_USED: u64 = 221;
-    const EDEADLINE_NOT_PASSED_SLASH: u64 = 222;
-    const EWRONG_OUTPUT_TX: u64 = 223;
-    const ENOT_FOR_LOCKER: u64 = 224;
-    const EINVALID_SCRIPT: u64 = 228;
-    const EUNSORTED_VOUT_INDEXES: u64 = 229;
-    const EINVALID_BURN_PROOF: u64 = 230;
-    const EINVALID_LOCKER: u64 = 231;
-    const EALREADY_INITIALIZED: u64 = 232;
+    const ELOW_FEE: u64 = 231;
+    const EDEADLINE_NOT_PASSED: u64 = 232;
     const EINVALID_BTCRELAY: u64 = 233;
     const ERROR_IS_PAUSED: u64 = 234;
     const ERROR_INSUFFICIENT_FUNDS: u64 = 235;
     const ERROR_BURN_FAILED: u64 = 236;
-    const ERROR_NOT_LOCKER: u64 = 512;
+    const ERROR_NOT_LOCKER: u64 = 237;
 
     // ===== EVENTS =====
     public struct NewUnwrap has copy, drop {
@@ -127,7 +99,7 @@ module teleswap::burn_router_locker_connector {
 
         // Extract amount from coin
         let amount = coin::value(&amount_coin);
-        let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script, locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
 
         
         // Check validity of user script
@@ -202,8 +174,8 @@ module teleswap::burn_router_locker_connector {
         coins: Coin<TELEBTC>,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
-        ctx: &mut TxContext,
-        locker_cap: &mut LockerCap
+        locker_cap: &mut LockerCap,
+        ctx: &mut TxContext
     ) {
         // Check if system is paused
         assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
@@ -215,7 +187,7 @@ module teleswap::burn_router_locker_connector {
         let the_locker = lockerstorage::get_mut_locker_from_mapping(locker_cap, _locker_target_address);
         
         // Get the amount from the coins
-        let _amount = coin::value(&coins);
+        let _amount = coin::value(&coins) as u256;
         
         // Check if locker has sufficient net minted
         let net_minted = lockerstorage::get_net_minted(the_locker);
@@ -246,7 +218,7 @@ module teleswap::burn_router_locker_connector {
     /// @param locker_cap The locker capability object
     /// @param ctx Transaction context
     /// @return True if the locker is slashed successfully
-    public fun slash_idle_locker(
+    public(package) fun slash_idle_locker(
         _locker_target_address: address,
         _reward_amount: u64,
         _slasher: address,
@@ -267,7 +239,7 @@ module teleswap::burn_router_locker_connector {
 
         // Calculate equivalent amounts using price oracle
         let equivalent_collateral_token = price_oracle::equivalent_output_amount(
-            _reward_amount + _amount, // Total amount of TeleBTC that is slashed
+            (_reward_amount + _amount) as u256, // Total amount of TeleBTC that is slashed
             8, // Decimal of teleBTC
             8, // Decimal of locked collateral
             @0x0, // teleBTC address (placeholder)
@@ -289,7 +261,7 @@ module teleswap::burn_router_locker_connector {
         
         // Calculate reward amount in collateral token
         let reward_amount_in_collateral_token = final_equivalent_collateral_token - 
-            ((final_equivalent_collateral_token * _amount) / (_amount + _reward_amount));
+            ((final_equivalent_collateral_token * (_amount as u256)) / ((_amount as u256) + (_reward_amount as u256)));
         
         // Calculate recipient amount
         let recipient_amount = final_equivalent_collateral_token - reward_amount_in_collateral_token;
@@ -312,7 +284,7 @@ module teleswap::burn_router_locker_connector {
             _locker_target_address,
             reward_amount_in_collateral_token,
             _slasher,
-            _amount,
+            _amount as u256,
             _recipient,
             final_equivalent_collateral_token,
             tx_context::epoch(ctx),
@@ -330,7 +302,7 @@ module teleswap::burn_router_locker_connector {
     /// @param locker_cap The locker capability object
     /// @param ctx Transaction context
     /// @return True if the locker is slashed successfully
-    public fun slash_thief_locker(
+    public(package) fun slash_thief_locker(
         _locker_target_address: address,
         _reward_amount: u64,
         _slasher: address,
@@ -341,7 +313,7 @@ module teleswap::burn_router_locker_connector {
         // Check if system is paused
         assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
         
-        assert!(lockerstorage::is_locker_by_address(locker_cap, _locker_target_address), ENOT_LOCKER);
+        assert!(lockerstorage::is_locker_by_address(locker_cap, _locker_target_address),ERROR_NOT_LOCKER);
         
         // Get values from locker_cap before getting mutable reference
         let reliability_factor = lockerstorage::get_reliability_factor(locker_cap, _locker_target_address);
@@ -352,11 +324,11 @@ module teleswap::burn_router_locker_connector {
         // Get the locker from mapping for calculations
         let the_locker = lockerstorage::get_locker_from_mapping(locker_cap, _locker_target_address);
         // Validate locker is active
-        assert!(lockerstorage::is_locker_struct_active(the_locker), ENOT_LOCKER);
+        assert!(lockerstorage::is_locker_struct_active(the_locker), ERROR_NOT_LOCKER);
 
         // Calculate equivalent collateral token using price oracle
         let equivalent_collateral_token = price_oracle::equivalent_output_amount(
-            _amount, // Total amount of TeleBTC that is slashed
+            _amount as u256, // Total amount of TeleBTC that is slashed
             8, // Decimal of TeleBTC
             8, // Decimal of locked collateral
             @0x0, // teleBTC address (placeholder)
@@ -364,7 +336,7 @@ module teleswap::burn_router_locker_connector {
         );
         
         // Calculate reward in collateral token
-        let reward_in_collateral_token = (equivalent_collateral_token * _reward_amount) / _amount;
+        let reward_in_collateral_token = (equivalent_collateral_token * (_reward_amount as u256)) / (_amount as u256);
         
         // Calculate needed collateral token for slash
         let needed_collateral_token_for_slash = (equivalent_collateral_token * liquidation_ratio * reliability_factor) / 
@@ -379,7 +351,7 @@ module teleswap::burn_router_locker_connector {
         // Check if total exceeds locker's collateral
         let (final_reward, final_needed) = if ((reward_in_collateral_token + needed_collateral_token_for_slash) > current_collateral) {
             // Divide total locker's collateral proportional to reward amount and slash amount
-            let proportional_reward = (reward_in_collateral_token * current_collateral) / 
+            let proportional_reward = (reward_in_collateral_token * current_collateral as u256) / 
                 (reward_in_collateral_token + needed_collateral_token_for_slash);
             let proportional_needed = current_collateral - proportional_reward;
             (proportional_reward, proportional_needed)
@@ -396,19 +368,17 @@ module teleswap::burn_router_locker_connector {
         lockerstorage::set_collateral_token_locked_amount(the_mut_locker, current_collateral - (final_reward + final_needed));
         
         // Update net minted (cap at net minted if amount exceeds it)
-        let amount_to_deduct = if (_amount > current_net_minted) {
+        let amount_to_deduct = if ((_amount as u256) > current_net_minted) {
             current_net_minted
         } else {
-            _amount
+            _amount as u256
         };
         
         lockerstorage::set_net_minted(the_mut_locker, current_net_minted - amount_to_deduct);
         
         // Update slashing info
-        lockerstorage::set_slashing_telebtc_amount(the_mut_locker, current_slashing_telebtc + _amount);
+        lockerstorage::set_slashing_telebtc_amount(the_mut_locker, current_slashing_telebtc + (_amount as u256));
         lockerstorage::set_reserved_collateral_token_for_slash(the_mut_locker, current_reserved_collateral + final_needed);
-        
-
         
        
         // Transfer WBTC to slasher
@@ -421,7 +391,7 @@ module teleswap::burn_router_locker_connector {
             _locker_target_address,
             final_reward,
             _slasher,
-            _amount,
+            _amount as u256,
             @0x0, // Contract address for thief slashing
             final_needed + final_reward,
             tx_context::epoch(ctx),
@@ -444,21 +414,41 @@ module teleswap::burn_router_locker_connector {
         ctx: &mut TxContext,
         locker_cap: &mut LockerCap
     ): (u64, u64, u64, u64) {
-        // Check if system is paused
-        assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
-        
-        // For now, return simplified values
-        // TODO: Implement actual fee calculation logic
+        // Calculate fees
         let amount = coin::value(&amount_coin);
-        let remaining_amount = amount * 95 / 100; // 95% remaining
-        let protocol_fee = amount * 3 / 100; // 3% protocol fee
-        let third_party_fee = amount * 1 / 100; // 1% third party fee
-        let locker_fee = amount * 1 / 100; // 1% locker fee
+        let protocol_fee = (amount * burn_router_storage::get_protocol_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let third_party_fee = (amount * burn_router_storage::get_third_party_fee(burn_router, third_party)) / MAX_PERCENTAGE_FEE;
+        let locker_fee = (amount * burn_router_storage::get_locker_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let bitcoin_fee = burn_router_storage::get_bitcoin_fee(burn_router);
+        let combined_locker_fee = locker_fee + bitcoin_fee;
+        assert!(amount  > DUST_SATOSHI_AMOUNT + protocol_fee + third_party_fee + combined_locker_fee, ELOW_FEE); // handle negative number use this trick
+        let remained_amount = amount - protocol_fee - third_party_fee - combined_locker_fee;
         
-        // Burn the coins
-        let burn_success = telebtc::burn(telebtc_cap, treasury_cap, amount_coin, ctx);
-        assert!(burn_success, ERROR_BURN_FAILED);
-        
-        (remaining_amount, protocol_fee, third_party_fee, locker_fee)
+        let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
+
+        // Start with the amount coin and split for each fee
+        let mut coins = amount_coin;
+
+        // Distribute fees to respective parties
+        if (protocol_fee > 0) {
+            let fee_coins = coin::split(&mut coins, protocol_fee, ctx);
+            transfer::public_transfer(fee_coins, burn_router_storage::get_treasury(burn_router));
+        };
+
+        if (third_party_fee > 0) {
+            let fee_coins = coin::split(&mut coins, third_party_fee, ctx);
+            transfer::public_transfer(fee_coins, burn_router_storage::get_third_party_address(burn_router, third_party));
+        };
+
+        if (combined_locker_fee > 0) {
+            let fee_coins = coin::split(&mut coins, combined_locker_fee, ctx);
+            transfer::public_transfer(fee_coins, locker_target_address);
+        };
+
+        // Burn remaining coins using locker burn function
+        burn(locker_locking_script, coins, telebtc_cap, treasury_cap, locker_cap, ctx);
+
+        // Return fee details
+        (remained_amount, protocol_fee, third_party_fee, combined_locker_fee)
     }
 } 

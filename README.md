@@ -107,12 +107,8 @@ MIT
 
 Other TODOs:
 -- Need to update deploy script due to directory messed up (will do after all the contracts done)
--- Telebtc test rewrite due to telebtc restructure (will do after locker contract)
--- "swap and burn" test
--- Error code re orgnize
 -- safe math rescan all files
 -- reentrancy issue rescan
--- BURN and distribute fee should call burn instead, put the burn logic in the connector
 -- locker need to assert only accpect wbtc
 -- Reward distribute system in ccexchange and cc transfer(made it in locker, send fee to lockers)
 
@@ -127,9 +123,13 @@ Mainnet/testnet update
     -- mainnet version: ready to ship version
 
 TODO:
-5. exchange contract test
+5. All test rerun
+5.5 test folder summary
 6. deployer script
-7. testnet intergration test
+7. testnet deployment test
+7.1 testnet exchange/dex connector test
+7.2 swap and unwrap test
+7.3 all intergration test
 8. gas improvement
 
 

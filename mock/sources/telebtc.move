@@ -264,10 +264,4 @@ module teleswap::telebtc {
             false
         }
     }
-
-    /// Returns a zero value TeleBTC coin
-    /// This is useful for testing and when you need to provide a coin with zero value
-    public fun zero_coin(ctx: &mut TxContext): Coin<TELEBTC> {
-        coin::zero(ctx)
-    }
 } 

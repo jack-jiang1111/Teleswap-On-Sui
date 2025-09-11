@@ -3,51 +3,35 @@ module teleswap::burn_router_logic {
     use sui::table::{Self, Table};
     use teleswap::burn_router_storage::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
     use teleswap::burn_router_helper::{Self};
-    use btcrelay::bitcoin_helper::{Self};    
-    use btcrelay::btcrelay::{Self,BTCRelay};
+    use teleswap::bitcoin_helper::{Self};    
+    use teleswap::btcrelay::{Self,BTCRelay};
     use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
     use sui::coin::{Self, Coin, TreasuryCap};
     use teleswap::lockerstorage::{Self, LockerCap};
     use teleswap::burn_router_locker_connector::{Self};
+    use teleswap::wbtc::{Self, WBTC};
+    use sui::sui::SUI;
+    //use usdc::usdc::USDC;
+    //use bridged_usdt::usdt::USDT;
+    use sui::clock::Clock;
+    use sui::balance::{Self, Balance};
     use sui::event;
-    use teleswap::lockercore;
+    //use cetus_clmm::pool;
+    //use cetus_clmm::config::GlobalConfig;
+    //use teleswap::dexconnector::{Self};
     
     // ===== CONSTANTS =====
     const MAX_PERCENTAGE_FEE: u64 = 10000; // 10000 means 100%
     const DUST_SATOSHI_AMOUNT: u64 = 1000;
     
     // Error codes
-    const EZERO_ADDRESS: u64 = 200;
-    const ENOT_ORACLE: u64 = 201;
-    const ELOW_STARTING_BLOCK: u64 = 202;
-    const EINVALID_FEE: u64 = 203;
-    const EINVALID_REWARD: u64 = 204;
-    const ELOW_DEADLINE: u64 = 205;
-    const ENOT_LOCKER: u64 = 206;
-    const ETRANSFER_FAILED: u64 = 207;
-    const EEXCHANGE_FAILED: u64 = 208;
-    const EINVALID_PATH: u64 = 209;
-    const EWRONG_AMOUNTS: u64 = 210;
-    const EINVALID_AMOUNT: u64 = 211;
-    const ELOW_FEE: u64 = 212;
-    const EFEE_TRANSFER_FAILED: u64 = 213;
-    const ETHIRD_PARTY_FEE_TRANSFER_FAILED: u64 = 214;
-    const ENETWORK_FEE_TRANSFER_FAILED: u64 = 215;
-    const EALREADY_PAID: u64 = 216;
-    const EDEADLINE_NOT_PASSED: u64 = 217;
-    const EOLD_REQUEST: u64 = 218;
-    const EWRONG_INPUTS: u64 = 219;
-    const ENOT_FINALIZED: u64 = 220;
-    const EALREADY_USED: u64 = 221;
-    const EDEADLINE_NOT_PASSED_SLASH: u64 = 222;
-    const EWRONG_OUTPUT_TX: u64 = 223;
-    const ENOT_FOR_LOCKER: u64 = 224;
-    const EINVALID_SCRIPT: u64 = 228;
-    const EUNSORTED_VOUT_INDEXES: u64 = 229;
-    const EINVALID_BURN_PROOF: u64 = 230;
-    const EINVALID_LOCKER: u64 = 231;
-    const EALREADY_INITIALIZED: u64 = 232;
-    const EINVALID_BTCRELAY: u64 = 233;
+    const ENOT_LOCKER: u64 = 201;
+    const ENOT_FINALIZED: u64 = 202;
+    const EINVALID_BURN_PROOF: u64 = 203;
+    const EINVALID_LOCKER: u64 = 204;
+    const EINVALID_BTCRELAY: u64 = 205;
+    const ESWAP_FAILED: u64 = 206;
+    const EINVALID_SWAP_RETURN_AMOUNT: u64 = 207;
 
     // === Events ===
     public struct DebugEvent has copy, drop {
@@ -144,18 +128,19 @@ module teleswap::burn_router_logic {
         transfer::public_share_object(burn_router);
     }
 
-    /// @notice Unwraps TeleBTC for cross-chain withdrawal
+    /// @notice Records a user's burn request for cross-chain BTC withdrawal.
+    /// @dev After submitting, the locker has a limited time to send BTC and provide proof.
     /// @param burn_router The BurnRouter object
-    /// @param amount_coin The TeleBTC coins to unwrap
+    /// @param amount_coin The Coin containing teleBTC to burn
     /// @param user_script The user's Bitcoin script hash
-    /// @param script_type The user's script type
-    /// @param locker_locking_script The locker's Bitcoin locking script
+    /// @param script_type The users script type
+    /// @param locker_locking_script The lockers Bitcoin locking script
     /// @param third_party The third party id
     /// @param telebtc_cap The TeleBTC capability
-    /// @param treasury_cap The TeleBTC treasury capability
+    /// @param treasury_cap The protocol treasury capability
     /// @param btcrelay The BTCRelay object
-    /// @param locker_cap The locker capability object
-    /// @param ctx Transaction context
+    /// @param locker_cap The dummy locker capability
+    /// @param ctx The transaction context
     /// @return The amount of BTC the user will receive
     public fun unwrap(
         burn_router: &mut BurnRouter,
@@ -185,40 +170,86 @@ module teleswap::burn_router_logic {
             ctx
         )
     }
-
+    /*
     /// @notice Exchanges input token for teleBTC, then burns it for cross-chain withdrawal.
     /// @dev After exchanging, rest of the process is similar to unwrap.
     /// @param burn_router The BurnRouter object
-    /// @param exchange_connector Address of exchange connector to be used
-    /// @param amounts [inputTokenAmount, teleBTCAmount]
-    /// @param is_fixed_token True if input token amount is fixed
-    /// @param path Path of exchanging inputToken to teleBTC
-    /// @param deadline Deadline of exchanging
+    /// @param amounts [inputTokenAmount, minTeleBTCAmount]
     /// @param user_script The user's Bitcoin script hash
     /// @param script_type The users script type
     /// @param locker_locking_script The lockers Bitcoin locking script
     /// @param third_party The third party id
+    /// @param config Global configuration for Cetus CLMM
+    /// @param pool_usdc_sui Pool for USDC-SUI trading
+    /// @param pool_usdc_usdt Pool for USDC-USDT trading
+    /// @param pool_usdc_wbtc Pool for USDC-WBTC trading
+    /// @param pool_telebtc_wbtc Pool for TELEBTC-WBTC trading
+    /// @param wbtc_coin WBTC coin for swapping (only one of the tokens should be non-zero)
+    /// @param sui_coin SUI coin for swapping (only one of the tokens should be non-zero)
+    /// @param usdt_coin USDT coin for swapping (only one of the tokens should be non-zero)
+    /// @param usdc_coin USDC coin for swapping (only one of the tokens should be non-zero)
+    /// @param telebtc_cap The TeleBTC capability
+    /// @param treasury_cap The protocol treasury capability
+    /// @param btcrelay The BTCRelay object
+    /// @param locker_cap The dummy locker capability
+    /// @param clock The Sui clock
     /// @param ctx The transaction context
     /// @return The amount of BTC the user will receive
-    public fun swap_and_unwrap(
-        burn_router: &mut BurnRouter,
-        exchange_connector: address,
-        amounts: vector<u64>,
-        is_fixed_token: bool,
-        path: vector<address>,
-        deadline: u64,
-        user_script: vector<u8>,
-        script_type: u8,
-        locker_locking_script: vector<u8>,
-        third_party: u64,
-        ctx: &mut TxContext
-    ): u64 {
-        // Notice:Will implement this when exchange connector is implemented
-        // TODO: Exchange input token for teleBTC
-        // TODO: Call _swap_and_unwrap function
-        // TODO: Return amount
-        0
-    }
+    // public fun swap_and_unwrap(
+    //     burn_router: &mut BurnRouter,
+    //     amounts: vector<u64>,
+    //     user_script: vector<u8>,
+    //     script_type: u8,
+    //     locker_locking_script: vector<u8>,
+    //     third_party: u64,
+    //     config: &GlobalConfig,
+    //     pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
+    //     pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
+    //     pool_usdc_wbtc: &mut pool::Pool<USDC, WBTC>,
+    //     pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, WBTC>,
+    //     wbtc_coin: Coin<WBTC>,
+    //     sui_coin: Coin<SUI>,
+    //     usdt_coin: Coin<USDT>,
+    //     usdc_coin: Coin<USDC>,
+    //     telebtc_cap: &mut TeleBTCCap,
+    //     treasury_cap: &mut TreasuryCap<TELEBTC>,
+    //     btcrelay: &BTCRelay,
+    //     locker_cap: &mut LockerCap,
+    //     clock: &Clock,
+    //     ctx: &mut TxContext
+    // ): u64 {
+    //     // Exchange input token for teleBTC using the exchange helper
+    //     let telebtc_coin = exchange_helper(
+    //         config,
+    //         pool_usdc_sui,
+    //         pool_usdc_usdt,
+    //         pool_usdc_wbtc,
+    //         pool_telebtc_wbtc,
+    //         amounts[0], // input amount
+    //         amounts[1], // min output amount
+    //         wbtc_coin,
+    //         sui_coin,
+    //         usdt_coin,
+    //         usdc_coin,
+    //         clock,
+    //         ctx
+    //     );
+        
+    //     // Call unwrap to burn the teleBTC and return the BTC amount
+    //     unwrap(
+    //         burn_router, 
+    //         telebtc_coin, 
+    //         user_script, 
+    //         script_type, 
+    //         locker_locking_script, 
+    //         third_party, 
+    //         telebtc_cap, 
+    //         treasury_cap, 
+    //         btcrelay, 
+    //         locker_cap, 
+    //         ctx
+    //     )
+    // }
 
     /// @notice Checks the correctness of a burn proof (Bitcoin tx) and marks requests as paid.
     /// @dev Only the locker or oracle can call. Updates isTransferred flag for paid requests.
@@ -233,6 +264,7 @@ module teleswap::burn_router_logic {
     /// @param index Index of the Bitcoin tx in the block
     /// @param locker_locking_script Locker's locking script that this burn request belongs to
     /// @param burn_req_indexes Indexes of requests that locker wants to provide proof for them
+    /// @param vout_indexes Indexes of outputs that were used to pay burn requests.
     ///                     vout_indexes[i] belongs to burn_req_indexes[i]
     /// @param locker_cap The dummy locker capability
     /// @param ctx The transaction context
@@ -260,7 +292,7 @@ module teleswap::burn_router_logic {
         );
 
         // Get the Locker target address
-        let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
         
         // Validate caller is locker or oracle
         let caller = ctx.sender();
@@ -322,9 +354,7 @@ module teleswap::burn_router_logic {
         true
     }
 
-    // ============================================================================
-    // PUBLIC GETTER FUNCTIONS
-    // ============================================================================
+
 
     /// @notice Slashes a locker if they did not pay a burn request before its deadline.
     /// @dev Only owner can call. Iterates over provided indices and slashes the locker for each.
@@ -346,10 +376,10 @@ module teleswap::burn_router_logic {
     ) {
         burn_router_storage::assert_admin(tx_context::sender(ctx), burn_router);
         // Check if the locking script is valid
-        assert!(lockerstorage::is_locker(locker_cap, locker_locking_script), EINVALID_LOCKER);
+        assert!(lockerstorage::is_locker_mock(locker_locking_script,locker_cap), EINVALID_LOCKER);
 
         // Get the target address of the locker from its locking script
-        let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
 
         let len = vector::length(&indices);
         let mut i = 0u64;
@@ -373,14 +403,13 @@ module teleswap::burn_router_logic {
             let sender = burn_router_storage::get_sender(&request);
 
             // Call dummy locker slashing 
-            burn_router_locker_connector::slash_idle_locker(
+            lockerstorage::slash_idle_locker_mock(
                 locker_target_address,
                 amount, // slasher reward 
                 tx_context::sender(ctx), // slasher address
                 amount, // total amount
                 sender, // user address
-                locker_cap,
-                ctx
+                locker_cap
             );
 
             // Emit BurnDispute event (define if needed)
@@ -469,14 +498,18 @@ module teleswap::burn_router_logic {
 
     // ===== PRIVATE FUNCTIONS =====
 
+
     /// @notice Helper to slash a locker for a malicious transaction, emits LockerDispute event.
-    /// @dev Internal function, called by dispute_locker.
+    /// @dev Internal function, called by dispute_locker. Prepares slashing data and calls
+    /// the dummy locker to perform the actual slashing. Emits LockerDispute event with
+    /// details of the slashing operation.
     /// @param burn_router The BurnRouter object
     /// @param locker_locking_script The locker's Bitcoin locking script
     /// @param input_vout The outputs of the malicious transaction
     /// @param input_tx_id The tx id of the malicious transaction
     /// @param input_block_number The block number of the malicious transaction
     /// @param ctx The transaction context
+    /// @param locker_cap The dummy locker capability
     fun slash_locker_for_dispute(
         burn_router: &mut BurnRouter,
         locker_locking_script: vector<u8>,
@@ -492,13 +525,12 @@ module teleswap::burn_router_logic {
             locker_locking_script,
             locker_cap
         );
-        burn_router_locker_connector::slash_thief_locker(
+        lockerstorage::slash_thief_locker_mock(
             locker_target_address,
             slasher_reward,
             tx_context::sender(ctx),
             total_value,
-            locker_cap,
-            ctx
+            locker_cap
         );
         let total_value_slashed = total_value + slasher_reward;
         let event = LockerDispute {
@@ -510,5 +542,56 @@ module teleswap::burn_router_logic {
         };
         event::emit(event);
     }
+
+    // fun exchange_helper(
+    //     config: &GlobalConfig,
+    //     pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
+    //     pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
+    //     pool_usdc_wbtc: &mut pool::Pool<USDC, WBTC>,
+    //     pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, WBTC>,
+    //     input_amount: u64,
+    //     min_output_amount: u64,
+    //     wbtc_coin: Coin<WBTC>,
+    //     sui_coin: Coin<SUI>,
+    //     usdt_coin: Coin<USDT>,
+    //     usdc_coin: Coin<USDC>,
+    //     clock: &Clock,
+    //     ctx: &mut TxContext
+    // ): Coin<TELEBTC>
+    // {
+    //     // Create a zero-amount teleBTC coin for the swap
+    //     let telebtc_coin = coin::zero<TELEBTC>(ctx);
+        
+    //     let (status,telebtc_coin,wbtc_coin,sui_coin,usdt_coin,usdc_coin) = dexconnector::mainSwapTokens<TELEBTC>(
+    //         config,
+    //         pool_usdc_sui,
+    //         pool_usdc_usdt,
+    //         pool_usdc_wbtc,
+    //         pool_telebtc_wbtc,
+    //         input_amount,
+    //         min_output_amount,
+    //         telebtc_coin,
+    //         wbtc_coin,
+    //         sui_coin,
+    //         usdt_coin,
+    //         usdc_coin,
+    //         clock,
+    //         ctx
+    //     );
+    //     // The return value from mainswap token should contain only teleBTC, with other tokens being zero
+    //     assert!(status, ESWAP_FAILED);
+    //     assert!(coin::value(&wbtc_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+    //     assert!(coin::value(&sui_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+    //     assert!(coin::value(&usdt_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+    //     assert!(coin::value(&usdc_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+    //     // destroy the zero-amount coins
+    //     coin::destroy_zero(wbtc_coin);
+    //     coin::destroy_zero(sui_coin);
+    //     coin::destroy_zero(usdt_coin);
+    //     coin::destroy_zero(usdc_coin);
+    //     // return the teleBTC coin
+    //     telebtc_coin
+    // }
+    */
 
 } 

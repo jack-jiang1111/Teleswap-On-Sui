@@ -1,32 +1,43 @@
-#[allow( lint(self_transfer),lint(share_owned))]
+#[allow( lint(self_transfer),lint(share_owned),unused_field)]
 module teleswap::cc_transfer_router_logic {
     use teleswap::cc_transfer_router_storage::{Self, CCTransferRouterCap, CC_TRANSFER_ADMIN, TxAndProof};
+    use teleswap::lockercore::{Self};
     use teleswap::telebtc::{TeleBTCCap, TELEBTC};
     use btcrelay::btcrelay::{Self, BTCRelay};
-    use teleswap::lockercore::{Self};
     use teleswap::lockerstorage::{Self, LockerCap};
     use btcrelay::bitcoin_helper;
     use teleswap::request_parser;
     use sui::coin::{Self, TreasuryCap};
     use sui::event;
     use sui::clock::{Clock};
+
     // === Error Codes ===
 
-    const EINVALID_LOCKER: u64 = 300;
-    const EINVALID_DATA_LENGTH: u64 = 301;
-    const EZERO_INPUT_AMOUNT: u64 = 302;
-    const EINVALID_APP_ID: u64 = 303;
-    const EINVALID_FEE: u64 = 304;
-    const EINVALID_SPEED: u64 = 305;
-    const EINVALID_SENDER: u64 = 306;
-    const EREQUEST_TOO_OLD: u64 = 307;
-    const EREQUEST_USED: u64 = 308;
-    const ENONZERO_LOCKTIME: u64 = 309;
-    const ETX_NOT_FINALIZED: u64 = 310;
-    const EALREADY_INITIALIZED: u64 = 311;
-    const EINVALID_BTC_RELAY: u64 = 312;
-    // === Events ===
+    const EINVALID_LOCKER: u64 = 321;
+    const EINVALID_DATA_LENGTH: u64 = 322;
+    const EZERO_INPUT_AMOUNT: u64 = 323;
+    const EINVALID_APP_ID: u64 = 324;
+    const EINVALID_FEE: u64 = 325;
+    const EINVALID_SPEED: u64 = 326;
+    const EINVALID_SENDER: u64 = 327;
+    const EREQUEST_TOO_OLD: u64 = 328;
+    const EREQUEST_USED: u64 = 329;
+    const ENONZERO_LOCKTIME: u64 = 330;
+    const ETX_NOT_FINALIZED: u64 = 331;
+    const EALREADY_INITIALIZED: u64 = 332;
 
+    // === Events ===
+    public struct DebugEvent has copy, drop {
+            vec1: vector<u8>,
+            vec2: vector<u8>,
+            vec3: vector<u8>,
+            num1: u256,
+            num2: u256,
+            num3: u256,
+            addr1: address,
+            addr2: address,
+            addr3: address
+        }
     /// Emitted when a new wrap request is completed
     /// Contains details about the wrapped transaction including amounts and fees
     public struct NewWrap has copy, drop {
@@ -145,15 +156,16 @@ module teleswap::cc_transfer_router_logic {
         let network_fee = cc_transfer_router_storage::get_network_fee(router, tx_id);
         let third_party_id = cc_transfer_router_storage::get_third_party_id(router, tx_id);
         let third_party_fee = (amount * cc_transfer_router_storage::get_third_party_fee(router, third_party_id)) / 10000;
-        let locker_fee = (amount * cc_transfer_router_storage::get_locker_percentage_fee(router))/ 10000;
+        let locker_fee = (amount * cc_transfer_router_storage::get_locker_percentage_fee(router)) / 10000;
         let remained_amount = amount - protocol_fee - network_fee - third_party_fee;
         let recipient_address = cc_transfer_router_storage::get_recipient(router, tx_id);
 
         // Mint teleBTC and get the coins
-        let (mut coins, locker_address) = lockercore::mint(locker_locking_script, amount, locker_cap, telebtc_cap, treasury_cap, recipient_address, clock, ctx);
+        let (mut coins, locker_address) = lockercore::mint(locker_locking_script, amount as u256, locker_cap, telebtc_cap, treasury_cap, recipient_address, clock,ctx);
 
         // Distribute fees to respective parties
         if (network_fee > 0) {
+            // network fee is paid to teleporter, which is a constant value defined in the op_return value of the request
             let teleport_reward = coin::split(&mut coins, network_fee, ctx);
             transfer::public_transfer(teleport_reward, tx_context::sender(ctx));
         };
@@ -196,14 +208,14 @@ module teleswap::cc_transfer_router_logic {
         locker_cap: & LockerCap
     ) {
         // Verify locker exists
-        assert!(lockerstorage::is_locker(locker_cap, locker_locking_script), EINVALID_LOCKER);
+        assert!(lockerstorage::is_locker(locker_cap,locker_locking_script), EINVALID_LOCKER);
 
         // Extract value and opreturn data from request
         let (input_amount, arbitrary_data) = bitcoin_helper::parse_value_and_data_having_locking_script_small_payload(
             &vout,
             &locker_locking_script
         );
-
+        
         // Verify data length is correct (39 bytes)
         assert!(vector::length(&arbitrary_data) == 39, EINVALID_DATA_LENGTH);
 
@@ -235,7 +247,7 @@ module teleswap::cc_transfer_router_logic {
         );
     }
 
-    /// Check if the request has been execoin::cuted before
+    /// Check if the request has been executed before
     /// This is to avoid re-submitting a used request
     /// @param router The CC transfer router capability
     /// @param tx_id The transaction ID of the request
@@ -267,12 +279,6 @@ module teleswap::cc_transfer_router_logic {
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-        // Validate that the provided BTCRelay is the legitimate one
-        assert!(
-            cc_transfer_router_storage::validate_btcrelay(router, relay),
-            EINVALID_BTC_RELAY
-        );
-
         // Verify sender is authorized teleporter
         assert!(tx_context::sender(ctx) == cc_transfer_router_storage::get_special_teleporter(router), EINVALID_SENDER);
 
@@ -311,7 +317,7 @@ module teleswap::cc_transfer_router_logic {
             tx_id,
             locker_cap
         );
-
+        
         // Verify transaction is confirmed
         assert!(
             is_confirmed(
@@ -341,5 +347,6 @@ module teleswap::cc_transfer_router_logic {
             fees: vector[network_fee, locker_fee, protocol_fee, third_party_fee],
             third_party_id: cc_transfer_router_storage::get_third_party_id(router, tx_id)
         });
+        
     }
 } 

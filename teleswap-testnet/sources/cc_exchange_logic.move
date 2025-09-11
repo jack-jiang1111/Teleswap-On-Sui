@@ -3,10 +3,10 @@ module teleswap::cc_exchange_logic {
     use sui::table;
     use sui::event;
 
-    use teleswap::exchangestorage::{Self, ExchangeCap, ExchangeRequest, ExchangeAdmin};
+    use teleswap::cc_exchange_storage::{Self, ExchangeCap, ExchangeRequest, ExchangeAdmin};
     use teleswap::cc_transfer_router_storage::{Self, TxAndProof};
-    use teleswap::btcrelay::{Self, BTCRelay};
-    use teleswap::bitcoin_helper;
+    use btcrelay::btcrelay::{Self, BTCRelay};
+    use btcrelay::bitcoin_helper;
     use teleswap::request_parser;
     use teleswap::lockerstorage::{Self, LockerCap};
     use teleswap::lockercore::{Self};
@@ -16,7 +16,7 @@ module teleswap::cc_exchange_logic {
     use cetus_clmm::config::GlobalConfig;
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::clock::{Clock};
-    use teleswap::wbtc::{Self, WBTC};
+    use bridged_btc::btc::BTC;
     use sui::sui::SUI;
     use usdc::usdc::USDC;
     use bridged_usdt::usdt::USDT;
@@ -125,8 +125,8 @@ module teleswap::cc_exchange_logic {
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
-        pool_usdc_wbtc: &mut pool::Pool<USDC, WBTC>,
-        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, WBTC>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
         tx_and_proof: TxAndProof,
         locker_locking_script: vector<u8>,
         btcrelay: &BTCRelay,
@@ -138,12 +138,12 @@ module teleswap::cc_exchange_logic {
     ): bool {
         // Basic checks
         assert!(
-            tx_context::sender(ctx) == exchangestorage::special_teleporter(storage),
+            tx_context::sender(ctx) == cc_exchange_storage::special_teleporter(storage),
             EINVALID_TELEPORTER
         ); // Only Teleporter can submit requests
         
         assert!(
-            cc_transfer_router_storage::block_number(&tx_and_proof) >= exchangestorage::starting_block_number(storage),
+            cc_transfer_router_storage::block_number(&tx_and_proof) >= cc_exchange_storage::starting_block_number(storage),
             EOLD_REQUEST
         );
         
@@ -154,7 +154,7 @@ module teleswap::cc_exchange_logic {
 
         // Check that the given script hash is Locker
         assert!(
-            lockerstorage::is_locker_mock(locker_locking_script, locker_cap),
+            lockerstorage::is_locker(locker_cap, locker_locking_script),
             ENOT_LOCKER
         );
 
@@ -167,8 +167,8 @@ module teleswap::cc_exchange_logic {
         );
 
         // Get the exchange request and extract needed values
-        let request = table::borrow(exchangestorage::cc_exchange_requests(storage), tx_id);
-        let bridge_percentage_fee = exchangestorage::bridge_percentage_fee(request);
+        let request = table::borrow(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+        let bridge_percentage_fee = cc_exchange_storage::bridge_percentage_fee(request);
         
 
         // Mint input amount of TeleBTC and calculate fees
@@ -244,10 +244,10 @@ module teleswap::cc_exchange_logic {
         ctx: &mut TxContext
     ): (Coin<TELEBTC>, u64) {
         // Get the exchange request to access input amount and fee information
-        let request = table::borrow(exchangestorage::cc_exchange_requests(storage), tx_id);
-        let input_amount = exchangestorage::input_amount(request);
-        let network_fee = exchangestorage::fee(request);
-        let third_party = exchangestorage::third_party(request);
+        let request = table::borrow(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+        let input_amount = cc_exchange_storage::input_amount(request);
+        let network_fee = cc_exchange_storage::fee(request);
+        let third_party = cc_exchange_storage::third_party(request);
         
         // Mint TeleBTC by calling lockers contract
         let (telebtcCoin, locker_address) = lockercore::mint(
@@ -263,20 +263,20 @@ module teleswap::cc_exchange_logic {
 
         
         // Calculate fees based on percentages from storage
-        let protocol_fee = (input_amount * exchangestorage::protocol_percentage_fee(storage)) / 10000;
-        let third_party_fee = (input_amount * exchangestorage::get_third_party_fee_from_storage(storage, third_party)) / 10000;
-        let locker_fee = (input_amount * exchangestorage::locker_percentage_fee(storage)) / 10000;
+        let protocol_fee = (input_amount * cc_exchange_storage::protocol_percentage_fee(storage)) / 10000;
+        let third_party_fee = (input_amount * cc_exchange_storage::get_third_party_fee_from_storage(storage, third_party)) / 10000;
+        let locker_fee = (input_amount * cc_exchange_storage::locker_percentage_fee(storage)) / 10000;
         
         // Calculate remained input amount after deducting all fees
         let remained_input_amount = input_amount - (locker_fee + protocol_fee + network_fee + third_party_fee);
         
         // Since ExchangeRequest doesn't have copy ability, we need to update the request in place
         // Get a mutable reference to the request
-        let request_mut = table::borrow_mut(exchangestorage::cc_exchange_requests(storage), tx_id);
-        exchangestorage::set_request_protocol_fee(request_mut, protocol_fee);
-        exchangestorage::set_request_third_party_fee(request_mut, third_party_fee);
-        exchangestorage::set_request_locker_fee(request_mut, locker_fee);
-        exchangestorage::set_request_remained_input_amount(request_mut, remained_input_amount);
+        let request_mut = table::borrow_mut(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+        cc_exchange_storage::set_request_protocol_fee(request_mut, protocol_fee);
+        cc_exchange_storage::set_request_third_party_fee(request_mut, third_party_fee);
+        cc_exchange_storage::set_request_locker_fee(request_mut, locker_fee);
+        cc_exchange_storage::set_request_remained_input_amount(request_mut, remained_input_amount);
         let total_fees = protocol_fee + network_fee + third_party_fee + locker_fee;
         (telebtcCoin, total_fees)
     }
@@ -314,8 +314,8 @@ module teleswap::cc_exchange_logic {
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
-        pool_usdc_wbtc: &mut pool::Pool<USDC, WBTC>,
-        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, WBTC>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
         telebtc_coin: Coin<TELEBTC>,
         mut fees_telebtc_coin: Coin<TELEBTC>,
         locker_locking_script: vector<u8>,
@@ -326,10 +326,10 @@ module teleswap::cc_exchange_logic {
         ctx: &mut TxContext
     ) {
         // Get the exchange request from storage and snapshot fields
-        let request = table::borrow(exchangestorage::cc_exchange_requests(storage), tx_id);
-        let recipient_addr = exchangestorage::recipient_address(request);
-        let locker_fee_amt = exchangestorage::locker_fee(request);
-        let input_amt_snapshot = exchangestorage::input_amount(request);
+        let request = table::borrow(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+        let recipient_addr = cc_exchange_storage::recipient_address(request);
+        let locker_fee_amt = cc_exchange_storage::locker_fee(request);
+        let input_amt_snapshot = cc_exchange_storage::input_amount(request);
 
         // Execute the swap with individual parameters
         let (result, telebtc_coin, wbtc_coin, sui_coin, usdt_coin, usdc_coin) = execute_swap(
@@ -352,7 +352,7 @@ module teleswap::cc_exchange_logic {
         let out_usdt = coin::value(&usdt_coin);
         let out_usdc = coin::value(&usdc_coin);
         let (out_token_tn, out_amount) = if (out_wbtc > 0) {
-            (type_name::get<WBTC>(), out_wbtc)
+            (type_name::get<BTC>(), out_wbtc)
         } else if (out_usdc > 0) {
             (type_name::get<USDC>(), out_usdc)
         } else if (out_sui > 0) {
@@ -369,9 +369,9 @@ module teleswap::cc_exchange_logic {
 
         if(result) {
             // mark request as completed
-            let request_mut = table::borrow_mut(exchangestorage::cc_exchange_requests(storage), tx_id);
-            exchangestorage::set_request_completed(request_mut, true);
-            exchangestorage::set_request_remained_input_amount(request_mut, 0);
+            let request_mut = table::borrow_mut(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+            cc_exchange_storage::set_request_completed(request_mut, true);
+            cc_exchange_storage::set_request_remained_input_amount(request_mut, 0);
             // emit swap success event
             event::emit(SwapSuccess {
                 user: sui::tx_context::sender(ctx),
@@ -406,9 +406,9 @@ module teleswap::cc_exchange_logic {
             // merge remaining fee coins with the telebtc coin and deposit to vault
             let mut telebtc_coin = telebtc_coin;
             coin::join<TELEBTC>(&mut telebtc_coin, fees_telebtc_coin); // try to merge remaining fee coins with the telebtc coin
-            let request_mut = table::borrow_mut(exchangestorage::cc_exchange_requests(storage), tx_id);
-            exchangestorage::set_request_remained_input_amount(request_mut, coin::value(&telebtc_coin));
-            exchangestorage::deposit_to_vault(storage, telebtc_coin); // deposit to vault
+            let request_mut = table::borrow_mut(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+            cc_exchange_storage::set_request_remained_input_amount(request_mut, coin::value(&telebtc_coin));
+            cc_exchange_storage::deposit_to_vault(storage, telebtc_coin); // deposit to vault
         }
     }
 
@@ -437,32 +437,32 @@ module teleswap::cc_exchange_logic {
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
-        pool_usdc_wbtc: &mut pool::Pool<USDC, WBTC>,
-        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, WBTC>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
         locker_locking_script: vector<u8>,
         request: &ExchangeRequest,
         tx_id: vector<u8>,
         telebtc_coin: Coin<TELEBTC>,
         clock: &Clock,
         ctx: &mut TxContext
-    ): (bool, Coin<TELEBTC>, Coin<WBTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) {
+    ): (bool, Coin<TELEBTC>, Coin<BTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) {
         
         // get info from request
-        let target_token = exchangestorage::target_token(request);
-        let input_amount = exchangestorage::input_amount(request);
-        let output_amount = exchangestorage::output_amount(request);
+        let target_token = cc_exchange_storage::target_token(request);
+        let input_amount = cc_exchange_storage::input_amount(request);
+        let output_amount = cc_exchange_storage::output_amount(request);
         // get info from telebtc coin
         let telebtc_amount = coin::value(&telebtc_coin);
         assert!(telebtc_amount >= input_amount, EINVALID_AMOUNT);
 
-        let mut wbtc_coin = coin::zero<WBTC>(ctx);
+        let mut wbtc_coin = coin::zero<BTC>(ctx);
         let mut sui_coin = coin::zero<SUI>(ctx);
         let mut usdt_coin = coin::zero<USDT>(ctx);
         let mut usdc_coin = coin::zero<USDC>(ctx);
 
         if(target_token == 0) {
             // WBTC
-            return dexconnector::mainSwapTokens<WBTC>(
+            return dexconnector::mainSwapTokens<BTC>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -560,13 +560,13 @@ module teleswap::cc_exchange_logic {
         locker_cap: &LockerCap,
         ctx: &mut TxContext
     ) {
-        let request = table::borrow(exchangestorage::cc_exchange_requests(storage), tx_id);
+        let request = table::borrow(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
         
         // Get fee amounts
-        let third_party_fee = exchangestorage::third_party_fee(request);
-        let protocol_fee = exchangestorage::protocol_fee(request);
-        let network_fee = exchangestorage::fee(request);
-        let locker_fee = exchangestorage::locker_fee(request);
+        let third_party_fee = cc_exchange_storage::third_party_fee(request);
+        let protocol_fee = cc_exchange_storage::protocol_fee(request);
+        let network_fee = cc_exchange_storage::fee(request);
+        let locker_fee = cc_exchange_storage::locker_fee(request);
         
         // Split network fee coin
         if (network_fee > 0) {
@@ -579,15 +579,15 @@ module teleswap::cc_exchange_logic {
         if (protocol_fee > 0) {
             let protocol_fee_coin = coin::split(&mut remaining_coin, protocol_fee, ctx);
             // Transfer protocol fee to treasury
-            transfer::public_transfer(protocol_fee_coin, exchangestorage::treasury(storage));
+            transfer::public_transfer(protocol_fee_coin, cc_exchange_storage::treasury(storage));
         };
         
         // Split third party fee coin
         if (third_party_fee > 0) {
             let third_party_fee_coin = coin::split(&mut remaining_coin, third_party_fee, ctx);
             // Get third party address from storage
-            let third_party_id = exchangestorage::third_party(request);
-            let third_party_address = exchangestorage::get_third_party_address_from_storage(storage, third_party_id);
+            let third_party_id = cc_exchange_storage::third_party(request);
+            let third_party_address = cc_exchange_storage::get_third_party_address_from_storage(storage, third_party_id);
             // Transfer third party fee
             transfer::public_transfer(third_party_fee_coin, third_party_address);
         };
@@ -617,14 +617,14 @@ module teleswap::cc_exchange_logic {
         locker_cap: &LockerCap,
         ctx: &mut TxContext
     ) {
-        let request = table::borrow(exchangestorage::cc_exchange_requests(storage), tx_id);
-        let third_party = exchangestorage::third_party(request);
+        let request = table::borrow(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+        let third_party = cc_exchange_storage::third_party(request);
         
         // Get locker target address from locking script
         let locker_address = lockerstorage::get_locker_target_address_from_script(locker_locking_script, locker_cap);
         
         // Check if we should send directly to locker or use reward distributor
-        let reward_distributor = exchangestorage::reward_distributor(storage);
+        let reward_distributor = cc_exchange_storage::reward_distributor(storage);
         
         if (reward_distributor == @0x0 || third_party != 0) {
             // Send reward directly to locker
@@ -689,21 +689,21 @@ module teleswap::cc_exchange_logic {
         ctx: &mut TxContext
     ) {
         // Assert admin ownership
-        assert!(exchangestorage::is_owner(admin, tx_context::sender(ctx)), ENOT_OWNER);
+        assert!(cc_exchange_storage::is_owner(admin, tx_context::sender(ctx)), ENOT_OWNER);
 
         // Check that request has not been completed
-        let request = table::borrow(exchangestorage::cc_exchange_requests(storage), tx_id);
-        assert!(!exchangestorage::is_request_completed(request), EALREADY_USED);
-        let failed_request_amount = exchangestorage::remained_input_amount(request);
-        let third_party_id = exchangestorage::third_party(request);
+        let request = table::borrow(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+        assert!(!cc_exchange_storage::is_request_completed(request), EALREADY_USED);
+        let failed_request_amount = cc_exchange_storage::remained_input_amount(request);
+        let third_party_id = cc_exchange_storage::third_party(request);
         // drop immutable borrow of request here
 
         // Mark as completed
-        let request_mut = table::borrow_mut(exchangestorage::cc_exchange_requests(storage), tx_id);
-        exchangestorage::set_request_completed(request_mut, true);
+        let request_mut = table::borrow_mut(cc_exchange_storage::cc_exchange_requests(storage), tx_id);
+        cc_exchange_storage::set_request_completed(request_mut, true);
 
         // Withdraw TeleBTC amount from exchange vault
-        let amount_coin = exchangestorage::withdraw_from_vault(storage, failed_request_amount, ctx);
+        let amount_coin = cc_exchange_storage::withdraw_from_vault(storage, failed_request_amount, ctx);
 
         // Perform unwrap via connector
         let _refund_amount = burn_router_locker_connector::unwrap(
@@ -756,7 +756,7 @@ module teleswap::cc_exchange_logic {
         btcrelay: &BTCRelay
     ): vector<u8> {
         // Validate that the BTCRelay object is the legitimate one
-        assert!(exchangestorage::validate_btcrelay(storage, btcrelay), EINVALID_BTCRELAY);
+        assert!(cc_exchange_storage::validate_btcrelay(storage, btcrelay), EINVALID_BTCRELAY);
 
         // Calculate transaction ID (equivalent to BitcoinHelper.calculateTxId in Solidity)
         let tx_id = bitcoin_helper::calculate_tx_id(
@@ -767,7 +767,7 @@ module teleswap::cc_exchange_logic {
         );
 
         // Check that the request has not been processed before
-        assert!(!exchangestorage::is_request_used(storage, tx_id), EALREADY_USED);
+        assert!(!cc_exchange_storage::is_request_used(storage, tx_id), EALREADY_USED);
 
         // Extract value and OP_RETURN data from the request
         let (input_amount, arbitrary_data) = bitcoin_helper::parse_value_and_data_having_locking_script_small_payload(
@@ -795,7 +795,7 @@ module teleswap::cc_exchange_logic {
         
 
         // Create exchange request following the exact structure from exchangelib.sol
-        let exchange_request = exchangestorage::new_exchange_request(
+        let exchange_request = cc_exchange_storage::new_exchange_request(
             storage,
             app_id,
             input_amount,
@@ -813,7 +813,7 @@ module teleswap::cc_exchange_logic {
         );
 
         // Store the request in the storage cap
-        table::add(exchangestorage::cc_exchange_requests(storage), tx_id, exchange_request);
+        table::add(cc_exchange_storage::cc_exchange_requests(storage), tx_id, exchange_request);
 
         // Verify transaction is confirmed using the relay from storage
         let is_confirm = btcrelay::checkTxProof(
