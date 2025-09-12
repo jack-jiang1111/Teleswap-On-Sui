@@ -54,7 +54,7 @@ module teleswap::lockercore {
         assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
         
         // Get locker target address from locking script
-        let _locker_target_address = lockerstorage::get_locker_target_address_from_script(_locker_locking_script, locker_cap);
+        let _locker_target_address = lockerstorage::get_locker_target_address(_locker_locking_script, locker_cap);
         
         // Check if locker is active
         assert!(lockerstorage::is_locker_active(locker_cap, _locker_target_address, clock, ctx), ERROR_LOCKER_NOT_ACTIVE);

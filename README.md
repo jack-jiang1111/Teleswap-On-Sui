@@ -78,6 +78,18 @@ sui client faucet
 ```bash
 # Need to start a local Sui network and get some faucet token first
 # Also need to run the test file one by one (transaction will conflict)
+
+# Option 1: Run all tests sequentially using scripts
+# PowerShell (Windows):
+.\scripts\test\run-tests.ps1
+
+# Batch file (Windows):
+.\scripts\test\run-tests.bat
+
+# Node.js (Cross-platform):
+node scripts/test/run-tests.js
+
+# Option 2: Run tests individually
 npm test -- tests/btcrelay.test.ts
 npm test -- tests/telebtc.test.ts
 npm test -- tests/transfer.test.ts
@@ -109,13 +121,7 @@ Other TODOs:
 -- Need to update deploy script due to directory messed up (will do after all the contracts done)
 -- safe math rescan all files
 -- reentrancy issue rescan
--- locker need to assert only accpect wbtc
 -- Reward distribute system in ccexchange and cc transfer(made it in locker, send fee to lockers)
-
-Mainnet/testnet update
--- All the function in burn_router_locker_connector needs to be public(package)
--- set net_mint will be removed in real implmentation
-
 
 -- Three version of the projects
     -- localnet mock version: only available to local test
@@ -123,8 +129,6 @@ Mainnet/testnet update
     -- mainnet version: ready to ship version
 
 TODO:
-5. All test rerun
-5.5 test folder summary
 6. deployer script
 7. testnet deployment test
 7.1 testnet exchange/dex connector test

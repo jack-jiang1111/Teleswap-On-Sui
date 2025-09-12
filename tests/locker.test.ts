@@ -2,7 +2,7 @@ import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { LockerFactory } from './test_factory/locker_factory';
-import { getActiveKeypair } from '../scripts/sui.utils';
+import { getActiveKeypair } from '../scripts/helper/sui.utils';
 import { beforeAll, describe, expect, test, it } from "vitest";
 import BigNumber from 'bignumber.js';
 import { callMoveFunction, pure, object, splitGasTokens } from "./utils/move-helper";
@@ -172,7 +172,6 @@ describe("Locker", () => {
             arguments: [
                 tx.object(telebtcCapId),              // &mut TeleBTCCap
                 tx.object(telebtcTreasuryCapId),              // &mut TeleBTCCap
-                tx.pure(to.toSuiAddress()),              // &mut TreasuryCap<TELEBTC>
                 tx.pure(amount),                                 // amount: u64
             ],
         });
@@ -1107,7 +1106,7 @@ describe("Locker", () => {
                 ],
                 signer: signer1
             });
-            console.log("removeCollateralResult",removeCollateralResult);
+            //console.log("removeCollateralResult",removeCollateralResult);
             await printEvents(removeCollateralResult);
             expect(removeCollateralResult.effects?.status?.status).toBe('success');
 
@@ -1170,7 +1169,7 @@ describe("Locker", () => {
                 signer: deployer
             });
             expect(result.effects?.status?.status).toBe('failure');
-            expect(result.effects?.status?.error).toMatch(/MoveAbort.*512/); // ERROR_NOT_LOCKER
+            expect(result.effects?.status?.error).toMatch(/MoveAbort.*237/); // ERROR_NOT_LOCKER
                
         });
 
@@ -1733,7 +1732,7 @@ describe("Locker", () => {
                 ],
                 signer: deployer
             });
-            console.log("result", result);
+            //console.log("result", result);
             printEvents(result);
             expect(result.effects?.status?.status).toBe('success');
 
@@ -2112,7 +2111,7 @@ describe("Locker", () => {
                 signer: signer1,
                 options: { showEffects: true, showEvents: true }
             });
-    
+            //console.log(result)
             expect(result.effects?.status?.status).toBe('failure');
             expect(result.effects?.status?.error).toMatch(/MoveAbort.*513/); // ERROR_LOCKER_ACTIVE
         });

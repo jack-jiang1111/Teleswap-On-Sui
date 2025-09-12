@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
-import { getActiveKeypair } from '../../scripts/sui.utils';
+import { getActiveKeypair } from '../../scripts/helper/sui.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import { printEvents, verifyUpgradeCap } from '../utils/utils';
@@ -90,9 +90,7 @@ export async function LockerFactory(
     btcrelayCapId: string,
     burnRouterCapId: string
 }> {
-    // Reset Move.toml addresses first
-    resetLockerMoveToml();
-    
+
     const client = new SuiClient({ url: getFullnodeUrl('localnet') });
     const deployer = await getActiveKeypair();
 
@@ -106,45 +104,37 @@ export async function LockerFactory(
     console.log('--------------------------------');
     console.log('Step 2: Deploying locker contracts...');
 
-    // Get all the locker contract modules
-    const lockerModules = [
-        'lockercore.mv',
-        'lockerhelper.mv', 
-        'lockerstorage.mv',
-        'lockermanager.mv',
-        'price_oracle.mv',
-        'burn_router_helper.mv',
-        'burn_router_locker_connector.mv',
-        'burn_router_storage.mv',
-        'burn_router_logic.mv',
-        'wbtc.mv',
-        'btcrelay.mv',
-        'bitcoin_helper.mv',
-        'telebtc.mv',
-    ];
+    // Get modules bytecode by traversing the build output and collecting all .mv files
+    const modulesDir = path.join(__dirname, '../../mock/build/teleswap/bytecode_modules');
+    const moduleFiles = fs.readdirSync(modulesDir)
+        .filter((f) => f.endsWith('.mv'))
+        .sort(); // ensure deterministic order
 
-    
-    // Read production modules
-    const lockerModuleBuffers = lockerModules.map(moduleName => 
-        fs.readFileSync(
-            path.join(__dirname, `../../mock/build/teleswap/bytecode_modules/${moduleName}`)
-        )
-    );
-      
+    // deploy all the modules except the cc_exchange_logic/cc_exchange_storage/dexconnector
+    const excluded = new Set(['cc_exchange_logic.mv', 'cc_exchange_storage.mv', 'dexconnector.mv']);
+    const filteredFiles = moduleFiles.filter((f) => !excluded.has(f));
+    const modules = filteredFiles.map((f) => Array.from(fs.readFileSync(path.join(modulesDir, f))));
+
     let tx = new TransactionBlock();
-    const [lockerUpgradeCap] = tx.publish({
-        modules: lockerModuleBuffers.map(buffer => Array.from(buffer)),
-        dependencies: ['0x1', '0x2', '0x3']
+    tx.setGasBudget(500000000);
+    const [upgradeCap] = tx.publish({
+        modules,
+        dependencies: [
+            '0x1', '0x2', '0x3',
+        ]
     });
 
-    tx.transferObjects([lockerUpgradeCap], tx.pure(deployer.toSuiAddress()));
-    
+    // Transfer the UpgradeCap to the deployer
+    tx.transferObjects([upgradeCap], tx.pure(deployer.toSuiAddress()));
     let result = await client.signAndExecuteTransactionBlock({
         transactionBlock: tx,
         signer: deployer,
         options: { showEffects: true, showEvents: true }
     });
-
+    if(result.effects?.status?.status !== 'success') {
+        console.log(result.effects);
+        throw new Error('Transaction failed');
+    }
     await new Promise(resolve => setTimeout(resolve, 3000));
 
     let lockerPackageId = "";

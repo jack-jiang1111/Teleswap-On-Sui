@@ -3,7 +3,7 @@ import { getFullnodeUrl } from '@mysten/sui.js/client';
 import { beforeAll, describe, expect, test,it ,beforeEach} from "vitest";
 import { CCBurnFactory } from "./test_factory/cc_burn_factory";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
-import { getActiveKeypair } from "../scripts/sui.utils";
+import { getActiveKeypair } from "../scripts/helper/sui.utils";
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 const CC_BURN_REQUESTS = require('./test_fixtures/ccBurnRequests.json');
 import BigNumber from 'bignumber.js';
@@ -21,13 +21,12 @@ let burnRouterAdminId: string;
 let telebtcCapId: string;
 let telebtcTreasuryCapId: string;
 let telebtcAdminId: string;
-let btcrelayPackageId: string;
 let btcrelayCapId: string;
 let btcrelayAdminId: string;
 let deployer: Ed25519Keypair;
 let deployerAddress: string;
 let burnRouterId: string;
-let dummyLockerCapId: string;
+let LockerCapId: string;
 
 // Constants
 // 100200000*(1-0.05%-0.1%)-49700 = 100000000
@@ -72,8 +71,8 @@ async function setLockersSlashIdleLockerReturn(value: boolean): Promise<void> {
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     tx.moveCall({
-        target: `${burnRouterPackageId}::dummy_locker::set_slash_idle_locker_return`,
-        arguments: [tx.object(dummyLockerCapId), tx.pure(value)],
+        target: `${burnRouterPackageId}::lockerstorage::set_slash_idle_locker_return`,
+        arguments: [tx.object(LockerCapId), tx.pure(value)],
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
     const result = await client.signAndExecuteTransactionBlock({
@@ -94,8 +93,8 @@ async function setLockersSlashThiefLockerReturn(value: boolean): Promise<void> {
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     tx.moveCall({
-        target: `${burnRouterPackageId}::dummy_locker::set_slash_thief_locker_return`,
-        arguments: [tx.object(dummyLockerCapId), tx.pure(value)],
+        target: `${burnRouterPackageId}::lockerstorage::set_slash_thief_locker_return`,
+        arguments: [tx.object(LockerCapId), tx.pure(value)],
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
     const result = await client.signAndExecuteTransactionBlock({
@@ -115,12 +114,12 @@ async function setLockersIsLocker(isLocker: boolean): Promise<void> {
     const client = new SuiClient({ url: getFullnodeUrl('localnet') });
     
     // Get latest object reference to avoid version mismatch
-    const dummyLockerCapRef = await getLatestObjectRef(client, dummyLockerCapId);
+    const dummyLockerCapRef = await getLatestObjectRef(client, LockerCapId);
     
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     tx.moveCall({
-        target: `${burnRouterPackageId}::dummy_locker::set_is_locker`,
+        target: `${burnRouterPackageId}::lockerstorage::set_is_locker`,
         arguments: [tx.object(dummyLockerCapRef.objectId), tx.pure(isLocker)],
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -141,12 +140,12 @@ async function setLockersGetLockerTargetAddress(address: string): Promise<void> 
     const client = new SuiClient({ url: getFullnodeUrl('localnet') });
     
     // Get latest object reference to avoid version mismatch
-    const dummyLockerCapRef = await getLatestObjectRef(client, dummyLockerCapId);
+    const dummyLockerCapRef = await getLatestObjectRef(client, LockerCapId);
     
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     tx.moveCall({
-        target: `${burnRouterPackageId}::dummy_locker::set_locker_target_address`,
+        target: `${burnRouterPackageId}::lockerstorage::set_locker_target_address`,
         arguments: [tx.object(dummyLockerCapRef.objectId), tx.pure(address)],
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -167,12 +166,12 @@ async function setLockersBurnReturn(burntAmount: number): Promise<void> {
     const client = new SuiClient({ url: getFullnodeUrl('localnet') });
     
     // Get latest object reference to avoid version mismatch
-    const dummyLockerCapRef = await getLatestObjectRef(client, dummyLockerCapId);
+    const dummyLockerCapRef = await getLatestObjectRef(client, LockerCapId);
     
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     tx.moveCall({
-        target: `${burnRouterPackageId}::dummy_locker::set_burn_return`,
+        target: `${burnRouterPackageId}::lockerstorage::set_burn_return`,
         arguments: [tx.object(dummyLockerCapRef.objectId), tx.pure(burntAmount)],
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -198,7 +197,7 @@ async function setRelayLastSubmittedHeight(blockNumber: number): Promise<void> {
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     tx.moveCall({
-        target: `${btcrelayPackageId}::btcrelay_mock::set_last_submitted_height`,
+        target: `${burnRouterPackageId}::btcrelay::set_last_submitted_height`,
         arguments: [tx.object(btcrelayCapRef.objectId), tx.pure(blockNumber)],
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -224,7 +223,7 @@ async function setRelayReturn(isTrue: boolean): Promise<void> {
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     tx.moveCall({
-        target: `${btcrelayPackageId}::btcrelay_mock::set_mock_return`,
+        target: `${burnRouterPackageId}::btcrelay::set_mock_return`,
         arguments: [tx.object(btcrelayCapRef.objectId), tx.pure(isTrue)],
     });
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -248,17 +247,16 @@ async function mintTeleBTCForTest(address = deployerAddress, amount = 10000): Pr
     // Get latest object references to avoid version mismatch
     const telebtcCapRef = await getLatestObjectRef(client, telebtcCapId);
     const telebtcTreasuryCapRef = await getLatestObjectRef(client, telebtcTreasuryCapId);
-    
+    await new Promise(resolve => setTimeout(resolve, 1500));
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
     
     // Mint the coins
     const mintResult = tx.moveCall({
-        target: `${burnRouterPackageId}::telebtc_mock::mint`,
+        target: `${burnRouterPackageId}::telebtc::mint`,
         arguments: [
-            tx.object(telebtcCapRef.objectId),              // &mut TeleBTCCap
-            tx.object(telebtcTreasuryCapRef.objectId),      // &mut TreasuryCap<TELEBTC_MOCK>
-            tx.pure(address),                                // recipient: address
+            tx.object(telebtcCapId),              // &mut TeleBTCCap
+            tx.object(telebtcTreasuryCapId),      // &mut TreasuryCap<TELEBTC>
             tx.pure(amount),                                 // amount: u64
         ],
     });
@@ -272,7 +270,7 @@ async function mintTeleBTCForTest(address = deployerAddress, amount = 10000): Pr
         signer: deployer,
         options: { showEffects: true, showEvents: true }
     });
-    
+    //console.log("result", result);
     expect(result.effects?.status?.status).toBe("success");
     
     // Extract and return the coin object ID
@@ -293,19 +291,19 @@ async function sendBurnRequest(
     // Call the Move unwrap (burn) entry function
     const result = await callMoveFunction({
         packageId: burnRouterPackageId,
-        moduleName: 'burn_router_logic_mock',
+        moduleName: 'burn_router_logic',
         functionName: 'unwrap',
         arguments: [
             object(burnRouterId),
-            object(coinObjectId),                 // amount_coin (Coin<TELEBTC_MOCK>) - actual coin object
+            object(coinObjectId),                 // amount_coin (Coin<TELEBTC>) - actual coin object
             pure(hexToBytes(userScript)),        // user_script (vector<u8>)
             pure(userScriptType),                // script_type (u8)
             pure(LOCKER1_LOCKING_SCRIPT),        // locker_locking_script (vector<u8>)
             pure(0),                             // third_party (u64, set to 0 if not used)
             object(telebtcCapId),                // &mut TeleBTCCap
-            object(telebtcTreasuryCapId),        // &mut TreasuryCap<TELEBTC_MOCK>
+            object(telebtcTreasuryCapId),        // &mut TreasuryCap<TELEBTC>
             object(btcrelayCapId),               // &BTCRelay
-            object(dummyLockerCapId),            // &mut DummyLockerCap
+            object(LockerCapId),            // &mut DummyLockerCap
         ],
         signer: deployer
     });
@@ -322,7 +320,7 @@ async function sendBurnRequest(
 async function provideProof(burnReqBlockNumber: number,signer: Ed25519Keypair,request_index: number): Promise<any> {
     const result = await callMoveFunction({
         packageId: burnRouterPackageId,
-        moduleName: 'burn_router_logic_mock',
+        moduleName: 'burn_router_logic',
         functionName: 'burn_proof',
         arguments: [
             object(burnRouterId),
@@ -337,7 +335,7 @@ async function provideProof(burnReqBlockNumber: number,signer: Ed25519Keypair,re
             pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
             pure([request_index]),
             pure([0]),
-            object(dummyLockerCapId),
+            object(LockerCapId),
         ],
         signer: signer
     });
@@ -364,11 +362,10 @@ describe('BurnRouter Test Suite', () => {
             telebtcCapId = cachedData.telebtcCapId;
             telebtcTreasuryCapId = cachedData.telebtcTreasuryCapId;
             telebtcAdminId = cachedData.telebtcAdminId;
-            btcrelayPackageId = cachedData.btcrelayPackageId;
             btcrelayCapId = cachedData.btcrelayCapId;
             btcrelayAdminId = cachedData.btcrelayAdminId;
             burnRouterId = cachedData.burnRouterId;
-            dummyLockerCapId = cachedData.dummyLockerCapId;
+            LockerCapId = cachedData.LockerCapId;
             
             console.log('Using cached IDs from package_id.json');
         } else {
@@ -380,15 +377,14 @@ describe('BurnRouter Test Suite', () => {
                 telebtcCapId,
                 telebtcTreasuryCapId,
                 telebtcAdminId,
-                btcrelayPackageId,
                 btcrelayCapId,
                 btcrelayAdminId,
-                dummyLockerCapId
+                LockerCapId
             } = factory);
             //console.log({burnRouterAdminId,TREASURY,TRANSFER_DEADLINE,PROTOCOL_PERCENTAGE_FEE,LOCKER_PERCENTAGE_FEE,SLASHER_PERCENTAGE_REWARD,BITCOIN_FEE,deployerAddress,btcrelayCapId});
             let result = await callMoveFunction({
                 packageId: burnRouterPackageId,
-                moduleName: 'burn_router_logic_mock',
+                moduleName: 'burn_router_logic',
                 functionName: 'initialize',
                 arguments: [
                     object(burnRouterAdminId),
@@ -419,11 +415,10 @@ describe('BurnRouter Test Suite', () => {
                 telebtcCapId,
                 telebtcTreasuryCapId,
                 telebtcAdminId,
-                btcrelayPackageId,
                 btcrelayCapId,
                 btcrelayAdminId,
                 burnRouterId,
-                dummyLockerCapId
+                LockerCapId
             };
             fs.writeFileSync(packageIdPath, JSON.stringify(idsToSave, null, 2));
             console.log('Saved new IDs to package_id.json');
@@ -452,10 +447,9 @@ describe('BurnRouter Test Suite', () => {
         expect(telebtcCapId).toBeTruthy();
         expect(telebtcTreasuryCapId).toBeTruthy();
         expect(telebtcAdminId).toBeTruthy();
-        expect(btcrelayPackageId).toBeTruthy();
         expect(btcrelayCapId).toBeTruthy();
         expect(btcrelayAdminId).toBeTruthy();
-        expect(dummyLockerCapId).toBeTruthy();
+        expect(LockerCapId).toBeTruthy();
         expect(burnRouterId).toBeTruthy();
     });
 
@@ -473,6 +467,7 @@ describe('BurnRouter Burn Proof Tests', () => {
              USER_SCRIPT_P2PKH_TYPE,
              coinObjectId
          );
+         //console.log("burnResult", burnResult);
          expect(burnResult.effects?.status?.status).toBe("success");
          
          await new Promise(resolve => setTimeout(resolve, 1000));
@@ -492,7 +487,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         
         let isUsed = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_is_used_as_burn_proof',
             arguments: [object(burnRouterId), pure(hexToBytes(CC_BURN_REQUESTS.burnProof_valid.txId))],
             signer: deployer,
@@ -522,7 +517,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Provide proof using P2WPKH burn proof data
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -537,7 +532,7 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([2]), // Burn req index
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
@@ -546,7 +541,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Verify that the proof was marked as used
         let isUsed = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_is_used_as_burn_proof',
             arguments: [object(burnRouterId), pure(hexToBytes(CC_BURN_REQUESTS.burnProof_validP2WPKH.txId))],
             signer: deployer,
@@ -564,7 +559,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -579,7 +574,7 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([3]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
@@ -588,7 +583,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Verify that the proof was marked as used
         let isUsed = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_is_used_as_burn_proof',
             arguments: [object(burnRouterId), pure(hexToBytes(CC_BURN_REQUESTS.burnProof_validWithoutChange.txId))],
             signer: deployer,
@@ -607,7 +602,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // This should fail because the indexes are not in ascending order
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -622,7 +617,7 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([0, 1]), // start indexes
                 pure([1, 0]),  // end indexes - not sorted!
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
@@ -630,7 +625,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Expect failure due to unsorted indexes
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*250/
+            /MoveAbort.*223/
         );
         
     }, 60000);
@@ -638,7 +633,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -653,14 +648,14 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER_TARGET_ADDRESS)),
                 pure([4]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
         
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*246/
+            /MoveAbort.*220/
         );
     }, 60000);
 
@@ -670,7 +665,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -685,14 +680,14 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER_TARGET_ADDRESS)),
                 pure([5]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
         
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*239/
+            /MoveAbort.*213/
         );
          // Set mock contracts outputs
          await setLockersIsLocker(true);
@@ -704,7 +699,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Should revert when start index is bigger than end index
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -719,19 +714,19 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER_TARGET_ADDRESS)),
                 pure([0, 1]), // start indexes
                 pure([0]),    // end indexes - mismatch!
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*247/
+            /MoveAbort.*221/ // wrong indexes
         );
         
         // Should revert when end index is bigger than total number of burn requests
         result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -746,14 +741,14 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER_TARGET_ADDRESS)),
                 pure([6]),     // start indexes
                 pure([0, 1]),  // end indexes - too many!
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
         
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*247/
+            /MoveAbort.*221/ // EWRONG_INDEX
         );
     }, 60000);
 
@@ -763,7 +758,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -778,14 +773,14 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER_TARGET_ADDRESS)),
                 pure([7]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
         
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*220/
+            /MoveAbort.*202/ // not finialized
         );
     }, 60000);
 
@@ -795,7 +790,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -810,7 +805,7 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER_TARGET_ADDRESS)),
                 pure([8]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
@@ -842,7 +837,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Try to provide proof with wrong indexes
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -857,7 +852,7 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([10]), // start with 10
                 pure([1]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
@@ -865,13 +860,13 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Should not emit PaidCCBurn event (proof should fail)
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*230/
+            /MoveAbort.*203/ // invalid burn proof
         );
         // Check that the transfer status is false
         // First get the burn request
         let burnRequest = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_burn_request',
             arguments: [
                 object(burnRouterId), 
@@ -898,7 +893,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // First, submit a valid burn proof
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -913,13 +908,13 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([11]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*230/
+            /MoveAbort.*203/ // invalid burn proof
         );
     }, 60000);
 
@@ -928,7 +923,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Try to provide proof with deadline passed
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -943,7 +938,7 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([12]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
@@ -951,13 +946,13 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Should not emit PaidCCBurn event (proof should fail)
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*230/
+            /MoveAbort.*203/ // invalid burn proof
         );
         // Check that the transfer status is false
         // First get the burn request
         let burnRequest = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_burn_request',
             arguments: [
                 object(burnRouterId), 
@@ -984,7 +979,7 @@ describe('BurnRouter Burn Proof Tests', () => {
         // Submit proof with invalid change address
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -999,20 +994,20 @@ describe('BurnRouter Burn Proof Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([13]),
                 pure([0]),
-                object(dummyLockerCapId)
+                object(LockerCapId)
             ],
             signer: locker
         });
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*230/
+            /MoveAbort.*203/ // invalid burn proof
         );
 
         // Check that the transfer status is false
         // First get the burn request
         let burnRequest = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_burn_request',
             arguments: [
                 object(burnRouterId), 
@@ -1047,7 +1042,7 @@ describe('BurnRouter Unwrap Tests', () => {
         );
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*249/
+            /MoveAbort.*222/ // invalid script
         );
         //await new Promise(resolve => setTimeout(resolve, 1000));
         // Invalid script type (replace 20 with your actual error code for invalid script)
@@ -1058,7 +1053,7 @@ describe('BurnRouter Unwrap Tests', () => {
         );
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*249/
+            /MoveAbort.*222/ // INVALID SCRIPT
         );
     }, 60000);
     it('Burns teleBTC for user', async () => {
@@ -1067,9 +1062,9 @@ describe('BurnRouter Unwrap Tests', () => {
         const coinObjectId = await mintTeleBTCForTest(deployerAddress, userRequestedAmount.toNumber());
 
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for all object settle down
-        const prevBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc_mock::TELEBTC_MOCK");
-        const prevProtocolBalance = await getCoinBalance(client, burnRouterPackageId, TREASURY, "telebtc_mock::TELEBTC_MOCK");
-        const prevLockerBalance = await getCoinBalance(client, burnRouterPackageId, LOCKER_TARGET_ADDRESS, "telebtc_mock::TELEBTC_MOCK");
+        const prevBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc::TELEBTC");
+        const prevProtocolBalance = await getCoinBalance(client, burnRouterPackageId, TREASURY, "telebtc::TELEBTC");
+        const prevLockerBalance = await getCoinBalance(client, burnRouterPackageId, LOCKER_TARGET_ADDRESS, "telebtc::TELEBTC");
         //console.log("prevBalance before burn", prevBalance,prevProtocolBalance,prevLockerBalance);
 
         let protocolFee = Math.floor(userRequestedAmount.toNumber()*PROTOCOL_PERCENTAGE_FEE/10000);
@@ -1082,9 +1077,9 @@ describe('BurnRouter Unwrap Tests', () => {
         //console.log("result", result.effects);
         expect(result.effects?.status?.status).toBe("success");
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for all object settle down
-        const newUserBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc_mock::TELEBTC_MOCK");
-        const newProtocolBalance = await getCoinBalance(client, burnRouterPackageId, TREASURY, "telebtc_mock::TELEBTC_MOCK");
-        const newLockerBalance = await getCoinBalance(client, burnRouterPackageId, LOCKER_TARGET_ADDRESS, "telebtc_mock::TELEBTC_MOCK");
+        const newUserBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc::TELEBTC");
+        const newProtocolBalance = await getCoinBalance(client, burnRouterPackageId, TREASURY, "telebtc::TELEBTC");
+        const newLockerBalance = await getCoinBalance(client, burnRouterPackageId, LOCKER_TARGET_ADDRESS, "telebtc::TELEBTC");
         //console.log("newUserBalance after burn", newUserBalance,newProtocolBalance,newLockerBalance);
         //printEvents(result);
         expect(prevBalance-newUserBalance).toBe(userRequestedAmount.toNumber());
@@ -1101,7 +1096,7 @@ describe('BurnRouter Unwrap Tests', () => {
         const coinObjectId = await mintTeleBTCForTest(deployerAddress, insufficientAmount);
 
         await new Promise(resolve => setTimeout(resolve, 1000)); // wait for all object settle down
-        let userBalanceBeforeBurn = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc_mock::TELEBTC_MOCK");
+        let userBalanceBeforeBurn = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc::TELEBTC");
         // Try to burn with insufficient amount
         let result = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
@@ -1112,11 +1107,11 @@ describe('BurnRouter Unwrap Tests', () => {
         // Expect failure with error code 205 (ELOW_AMOUNT)
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*212/
+            /MoveAbort.*231/ // low fee
         );
         
         // Verify the coin object still exists (burn didn't happen)
-        const userBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc_mock::TELEBTC_MOCK");
+        const userBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc::TELEBTC");
         expect(userBalance).toBe(userBalanceBeforeBurn);
 
     }, 60000);
@@ -1129,7 +1124,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
     beforeAll(async () => {
         let burnRequestCountResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_burn_request_count',
             arguments: [object(burnRouterId), pure(LOCKER_TARGET_ADDRESS)],
             signer: deployer,
@@ -1173,7 +1168,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
         // Call dispute_burn function
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_burn',
             arguments: [
                 object(burnRouterAdminId),
@@ -1181,7 +1176,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
                 object(btcrelayCapId),
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([disputeRequestStartIndex]), // burn_req_indexes
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
@@ -1193,7 +1188,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
         // Second dispute should fail
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_burn',
             arguments: [
                 object(burnRouterAdminId),
@@ -1201,13 +1196,13 @@ describe('BurnRouter Dispute Burn Tests', () => {
                 object(btcrelayCapId),
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([disputeRequestStartIndex]), // burn_req_indexes
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*236/); // EALREADY_PAID
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*210/); // EALREADY_PAID
     }, 60000);
 
     it("Reverts since locking script is invalid", async function () {
@@ -1230,7 +1225,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
         // Call dispute_burn function
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_burn',
             arguments: [
                 object(burnRouterAdminId),
@@ -1238,13 +1233,13 @@ describe('BurnRouter Dispute Burn Tests', () => {
                 object(btcrelayCapId),
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([disputeRequestStartIndex+1]), // burn_req_indexes
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*231/); // ENOT_LOCKER
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*204/); // ENOT_LOCKER
     }, 60000);
 
     it("Reverts since locker has paid before hand", async function () {
@@ -1270,7 +1265,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
         // Pays the burnt amount and provides proof
         const burnProofResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock', // adjust if needed
+            moduleName: 'burn_router_logic', // adjust if needed
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -1285,7 +1280,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([disputeRequestStartIndex+2]),
                 pure([0]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: locker
         });
@@ -1295,7 +1290,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
         // Try to dispute after payment
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_burn',
             arguments: [
                 object(burnRouterAdminId),
@@ -1303,13 +1298,13 @@ describe('BurnRouter Dispute Burn Tests', () => {
                 object(btcrelayCapId),
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([disputeRequestStartIndex+2]), // burn_req_indexes
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*236/); // EALREADY_PAID
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*210/); // EALREADY_PAID
     }, 60000);
 
     it("Reverts since deadline hasn't reached", async function () {
@@ -1329,7 +1324,7 @@ describe('BurnRouter Dispute Burn Tests', () => {
         // Try to dispute before deadline
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_burn',
             arguments: [
                 object(burnRouterAdminId),
@@ -1337,13 +1332,13 @@ describe('BurnRouter Dispute Burn Tests', () => {
                 object(btcrelayCapId),
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([disputeRequestStartIndex+3]), // burn_req_indexes
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*237/); // EDEADLINE_NOT_PASSED
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*211/); // EDEADLINE_NOT_PASSED
     }, 60000);
 }); 
 
@@ -1360,7 +1355,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
     it("Dispute the locker who has sent its BTC to external account", async function () {
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1375,7 +1370,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
@@ -1387,7 +1382,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
         // Test 1: Wrong versions array length
         let result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1402,18 +1397,18 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*240/); // EWRONG_INPUTS
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*214/); // EWRONG_INPUTS
 
         // Test 2: Wrong locktimes array length
         result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1428,18 +1423,18 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime)]), // Only one locktime
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*240/); // EWRONG_INPUTS
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*214/); // EWRONG_INPUTS
 
         // Test 3: Wrong indexes_and_block_numbers array length
         result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1454,13 +1449,13 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1]), // Only two values instead of three
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*240/); // EWRONG_INPUTS
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*214/); // EWRONG_INPUTS
     }, 60000);
 
     it("Reverts since locking script is not valid", async function () {
@@ -1469,7 +1464,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
         await new Promise(resolve => setTimeout(resolve, 1000));
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1484,13 +1479,13 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*239/); // ENOT_LOCKER
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*213/); // ENOT_LOCKER
     }, 60000);
 
     it("Reverts since input tx has not finalized", async function () {
@@ -1500,7 +1495,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
         await new Promise(resolve => setTimeout(resolve, 1000));
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1515,13 +1510,13 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*241/); // ENOT_FINALIZED
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*215/); // ENOT_FINALIZED
         await setRelayReturn(true); // setRelayCheckTxProofReturn
         await new Promise(resolve => setTimeout(resolve, 1000));
     }, 60000);
@@ -1530,7 +1525,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
 
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1545,19 +1540,19 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*242/); // ENOT_FINALIZED
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*216/); // EALDREADY_USED
     }, 60000);
 
     it("Reverts since outpoint doesn't match with output tx", async function () {
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1572,20 +1567,20 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_invalidOutput.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*244/); // EWRONG_OUTPUT_TX
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*218/); // EWRONG_OUTPUT_TX
     }, 60000);
 
     it("Reverts since tx doesn't belong to locker", async function () {
 
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1600,20 +1595,20 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.disputeLocker_input.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*245/); // ENOT_FOR_LOCKER
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*219/); // ENOT_FOR_LOCKER
     }, 60000);
 
     it("Reverts since locker may submit input tx as burn proof", async function () {
 
         let burnRequestCountResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_burn_request_count',
             arguments: [object(burnRouterId), pure(LOCKER_TARGET_ADDRESS)],
             signer: deployer,
@@ -1646,7 +1641,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
         // Provide burn proof using burnProof_valid3
         const burnProofResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'burn_proof',
             arguments: [
                 object(burnRouterId),
@@ -1661,7 +1656,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
                 pure([burnRequestCount]),
                 pure([0]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: locker
         });
@@ -1671,7 +1666,7 @@ describe('BurnRouter Dispute Locker Tests', () => {
         // Try to dispute the same transaction
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_logic_mock',
+            moduleName: 'burn_router_logic',
             functionName: 'dispute_locker',
             arguments: [
                 object(burnRouterAdminId),
@@ -1686,13 +1681,13 @@ describe('BurnRouter Dispute Locker Tests', () => {
                 pure([hexToBytes(CC_BURN_REQUESTS.burnProof_valid4.locktime), hexToBytes(CC_BURN_REQUESTS.disputeLocker_output.locktime)]),
                 pure(hexToBytes(CC_BURN_REQUESTS.burnProof_valid4.intermediateNodes)),
                 pure([0, 1, burnReqBlockNumber]),
-                object(dummyLockerCapId),
+                object(LockerCapId),
             ],
             signer: deployer
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*242/); // EALREADY_USED
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*216/); // EALREADY_USED
     }, 60000);
 }); 
 
@@ -1707,7 +1702,7 @@ describe('BurnRouter Setter Tests', () => {
     it("Sets protocol percentage fee", async function () {
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'set_protocol_percentage_fee',
             arguments: [
                 object(burnRouterAdminId),
@@ -1722,7 +1717,7 @@ describe('BurnRouter Setter Tests', () => {
         // Verify the fee was set correctly
         const feeResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_protocol_percentage_fee',
             arguments: [
                 object(burnRouterId)
@@ -1745,7 +1740,7 @@ describe('BurnRouter Setter Tests', () => {
     it("Reverts since protocol percentage fee is greater than 10000", async function () {
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'set_protocol_percentage_fee',
             arguments: [
                 object(burnRouterAdminId),
@@ -1756,13 +1751,13 @@ describe('BurnRouter Setter Tests', () => {
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*236/); // EINVALID_FEE
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*228/); // EINVALID_FEE
     }, 60000);
 
     it("Sets transfer deadline", async function () {
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'set_transfer_deadline',
             arguments: [
                 object(burnRouterAdminId),
@@ -1777,7 +1772,7 @@ describe('BurnRouter Setter Tests', () => {
         // Verify the deadline was set correctly
         const deadlineResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_transfer_deadline',
             arguments: [
                 object(burnRouterId)
@@ -1799,7 +1794,7 @@ describe('BurnRouter Setter Tests', () => {
     it("Sets slasher reward", async function () {
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'set_slasher_percentage_reward',
             arguments: [
                 object(burnRouterAdminId),
@@ -1814,7 +1809,7 @@ describe('BurnRouter Setter Tests', () => {
         // Verify the reward was set correctly
         const rewardResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_slasher_percentage_reward',
             arguments: [
                 object(burnRouterId)
@@ -1836,7 +1831,7 @@ describe('BurnRouter Setter Tests', () => {
     it("Reverts since slasher reward is greater than 100", async function () {
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'set_slasher_percentage_reward',
             arguments: [
                 object(burnRouterAdminId),
@@ -1847,14 +1842,14 @@ describe('BurnRouter Setter Tests', () => {
         });
 
         expect(result.effects?.status?.status).toBe("failure");
-        expect(result.effects?.status?.error).toMatch(/MoveAbort.*236/); // EINVALID_FEE
+        expect(result.effects?.status?.error).toMatch(/MoveAbort.*228/); // EINVALID_FEE
     }, 60000);
 
     it("Sets bitcoin fee", async function () {
         // Set bitcoin fee - this should work if the sender is the oracle
         const result = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'set_bitcoin_fee',
             arguments: [
                 object(burnRouterId),
@@ -1868,7 +1863,7 @@ describe('BurnRouter Setter Tests', () => {
         // Verify the fee was set correctly
         const feeResult = await callMoveFunction({
             packageId: burnRouterPackageId,
-            moduleName: 'burn_router_storage_mock',
+            moduleName: 'burn_router_storage',
             functionName: 'get_bitcoin_fee',
             arguments: [
                 object(burnRouterId)

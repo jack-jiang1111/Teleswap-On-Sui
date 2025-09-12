@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
-import { getActiveKeypair } from '../scripts/sui.utils';
+import { getActiveKeypair } from '../scripts/helper/sui.utils';
 import { BitcoinInterface } from '@teleportdao/bitcoin';
 import * as fs from 'fs';
 import * as path from 'path';

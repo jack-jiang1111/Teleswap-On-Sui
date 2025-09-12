@@ -2,7 +2,7 @@ import { SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 import { getFullnodeUrl } from '@mysten/sui.js/client';
-import { getActiveKeypair } from '../../scripts/sui.utils';
+import { getActiveKeypair } from '../../scripts/helper/sui.utils';
 
 export type MoveArgument = {
     type: 'pure' | 'object' | 'objectRef' | 'sharedObjectRef';

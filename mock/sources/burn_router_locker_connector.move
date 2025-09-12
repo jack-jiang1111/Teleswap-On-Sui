@@ -162,6 +162,106 @@ module teleswap::burn_router_locker_connector {
         remaining_amount
     }
 
+    /// @notice Unwraps TeleBTC for cross-chain withdrawal (connector function)
+    /// @param burn_router The BurnRouter object
+    /// @param amount_coin The TeleBTC coins to unwrap
+    /// @param user_script The user's Bitcoin script hash
+    /// @param script_type The user's script type
+    /// @param locker_locking_script The locker's Bitcoin locking script
+    /// @param third_party The third party id
+    /// @param telebtc_cap The TeleBTC capability
+    /// @param treasury_cap The TeleBTC treasury capability
+    /// @param btcrelay The BTCRelay object
+    /// @param locker_cap The locker capability object
+    /// @param ctx Transaction context
+    /// @return The amount of BTC the user will receive
+    public(package) fun unwrap_mock(
+        burn_router: &mut BurnRouter,
+        amount_coin: Coin<TELEBTC>,
+        user_script: vector<u8>,
+        script_type: u8,
+        locker_locking_script: vector<u8>,
+        third_party: u64,
+        telebtc_cap: &mut TeleBTCCap,
+        treasury_cap:  &mut TreasuryCap<TELEBTC>,
+        btcrelay: &BTCRelay,
+        locker_cap: &mut LockerCap,
+        ctx: &mut TxContext
+    ): u64 {
+        // Check if system is paused
+        assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
+        
+        // Validate that the provided BTCRelay is the legitimate one
+        assert!(
+            burn_router_storage::validate_btcrelay(burn_router, btcrelay),
+            EINVALID_BTCRELAY
+        );
+
+        // Extract amount from coin
+        let amount = coin::value(&amount_coin);
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script, locker_cap);
+
+        
+        // Check validity of user script
+        burn_router_helper::check_script_type_and_locker(
+            user_script,
+            script_type,
+            locker_locking_script,
+            locker_cap
+        );
+
+        let (remaining_amount, protocol_fee, third_party_fee, locker_fee) = burn_and_distribute_fees_mock(
+            burn_router,
+            amount_coin,
+            locker_locking_script,
+            third_party,
+            telebtc_cap,
+            treasury_cap,
+            ctx,
+            locker_cap
+        );
+
+        // Save burn request
+        let request_id = burn_router_storage::save_burn_request(
+            burn_router,
+            amount,
+            remaining_amount,
+            user_script,
+            script_type,
+            btcrelay::lastSubmittedHeight(btcrelay),
+            locker_target_address,
+            tx_context::sender(ctx),
+        );
+
+        // Create amounts vector: [input_amount, amount, remaining_amount]
+        let mut amounts = vector::empty<u64>();
+        vector::push_back(&mut amounts, amount); // input_amount
+        vector::push_back(&mut amounts, amount-remaining_amount); // fees
+        vector::push_back(&mut amounts, remaining_amount); // remaining_amount
+
+        // Create fees vector: [bitcoin_fee, locker_fee, protocol_fee, third_party_fee]
+        let mut fees = vector::empty<u64>();
+        vector::push_back(&mut fees, locker_fee); // locker_fee with bitcoin_fee
+        vector::push_back(&mut fees, protocol_fee);
+        vector::push_back(&mut fees, third_party_fee);
+
+        // Emit NewUnwrap event 
+        event::emit(NewUnwrap {
+            user_script,
+            script_type,
+            locker_target_address,
+            sender: tx_context::sender(ctx),
+            request_id,
+            deadline: btcrelay::lastSubmittedHeight(btcrelay) + burn_router_storage::get_transfer_deadline(burn_router),
+            third_party,
+            amounts,
+            fees,
+        });
+        
+        // Return the remaining amount
+        remaining_amount
+    }
+
     /// @notice Burns TeleBTC by a locker (connector function)
     /// @param _locker_locking_script The locker's locking script
     /// @param coins The TeleBTC coins to burn
@@ -181,7 +281,7 @@ module teleswap::burn_router_locker_connector {
         assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
         
         // Get locker target address from locking script
-        let _locker_target_address = lockerstorage::get_locker_target_address_from_script(_locker_locking_script, locker_cap);
+        let _locker_target_address = lockerstorage::get_locker_target_address(_locker_locking_script, locker_cap);
         
         // Get locker from mapping
         let the_locker = lockerstorage::get_mut_locker_from_mapping(locker_cap, _locker_target_address);
@@ -450,5 +550,92 @@ module teleswap::burn_router_locker_connector {
 
         // Return fee details
         (remained_amount, protocol_fee, third_party_fee, combined_locker_fee)
+    }
+
+    fun burn_and_distribute_fees_mock(
+        burn_router: &mut BurnRouter,
+        amount_coin: Coin<TELEBTC>,
+        locker_locking_script: vector<u8>,
+        third_party: u64,
+        telebtc_cap: &mut TeleBTCCap,
+        treasury_cap: &mut TreasuryCap<TELEBTC>,
+        ctx: &mut TxContext,
+        locker_cap: &mut LockerCap
+    ): (u64, u64, u64, u64) {
+        // Calculate fees
+        let amount = coin::value(&amount_coin);
+        let protocol_fee = (amount * burn_router_storage::get_protocol_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let third_party_fee = (amount * burn_router_storage::get_third_party_fee(burn_router, third_party)) / MAX_PERCENTAGE_FEE;
+        let locker_fee = (amount * burn_router_storage::get_locker_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let bitcoin_fee = burn_router_storage::get_bitcoin_fee(burn_router);
+        let combined_locker_fee = locker_fee + bitcoin_fee;
+        assert!(amount  > DUST_SATOSHI_AMOUNT + protocol_fee + third_party_fee + combined_locker_fee, ELOW_FEE); // handle negative number use this trick
+        let remained_amount = amount - protocol_fee - third_party_fee - combined_locker_fee;
+        
+        let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
+
+        // Start with the amount coin and split for each fee
+        let mut coins = amount_coin;
+
+        // Distribute fees to respective parties
+        if (protocol_fee > 0) {
+            let fee_coins = coin::split(&mut coins, protocol_fee, ctx);
+            transfer::public_transfer(fee_coins, burn_router_storage::get_treasury(burn_router));
+        };
+
+        if (third_party_fee > 0) {
+            let fee_coins = coin::split(&mut coins, third_party_fee, ctx);
+            transfer::public_transfer(fee_coins, burn_router_storage::get_third_party_address(burn_router, third_party));
+        };
+
+        if (combined_locker_fee > 0) {
+            let fee_coins = coin::split(&mut coins, combined_locker_fee, ctx);
+            transfer::public_transfer(fee_coins, locker_target_address);
+        };
+
+        // Burn remaining coins using locker burn function
+        burn_mock(locker_locking_script, coins, telebtc_cap, treasury_cap, locker_cap, ctx);
+
+        // Return fee details
+        (remained_amount, protocol_fee, third_party_fee, combined_locker_fee)
+    }
+
+    /// @notice Burns TeleBTC by a locker (connector function)
+    /// @param _locker_locking_script The locker's locking script
+    /// @param coins The TeleBTC coins to burn
+    /// @param telebtc_cap The TeleBTC capability
+    /// @param treasury_cap The TeleBTC treasury capability
+    /// @param ctx Transaction context
+    /// @param locker_cap The locker capability object
+    public fun burn_mock(
+        _locker_locking_script: vector<u8>,
+        coins: Coin<TELEBTC>,
+        telebtc_cap: &mut TeleBTCCap,
+        treasury_cap: &mut TreasuryCap<TELEBTC>,
+        locker_cap: &mut LockerCap,
+        ctx: &mut TxContext
+    ) {
+        // Check if system is paused
+        assert!(!lockerstorage::is_paused(locker_cap), ERROR_IS_PAUSED);
+        
+        // Get locker target address from locking script
+        let _locker_target_address = lockerstorage::get_locker_target_address_mock(_locker_locking_script, locker_cap);
+    
+        
+        // Get the amount from the coins
+        let _amount = coin::value(&coins) as u256;
+        
+        
+        // Burn TeleBTC using the telebtc module
+        let burn_success = telebtc::burn(telebtc_cap, treasury_cap, coins, ctx);
+        assert!(burn_success, ERROR_BURN_FAILED);
+        
+        // Emit burn event
+        lockerstorage::emit_burn_by_locker_event(
+            _locker_target_address,
+            _amount,
+            0, // No fee for now
+            tx_context::epoch(ctx),
+        );
     }
 } 

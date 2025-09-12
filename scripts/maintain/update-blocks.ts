@@ -2,7 +2,7 @@ import { SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import * as fs from 'fs';
 import { getNetwork } from '../config';
-import { getActiveKeypair } from '../sui.utils';
+import { getActiveKeypair } from '../helper/sui.utils';
 
 
 async function getBlockHeaders(height: number): Promise<string> {

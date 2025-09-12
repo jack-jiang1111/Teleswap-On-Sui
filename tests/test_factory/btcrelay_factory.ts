@@ -2,7 +2,7 @@
 import { expect } from 'vitest';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
-import { getActiveKeypair } from '../../scripts/sui.utils';
+import { getActiveKeypair } from '../../scripts/helper/sui.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import {  printEvents, verifyUpgradeCap } from '../utils/utils';
@@ -25,18 +25,18 @@ function ResetBtcrelayMoveToml() {
     console.log('Reset btcrelay-package/Move.toml');
 
 
-    // Update teleswap-main-package/Move.toml
-    const teleswapMainPackageMoveTomlPath = path.join(__dirname, '../../teleswap-main-package/Move.toml');
-    let teleswapMainPackageMoveTomlContent = fs.readFileSync(teleswapMainPackageMoveTomlPath, 'utf8');
+    // // Update teleswap-main-package/Move.toml
+    // const teleswapMainPackageMoveTomlPath = path.join(__dirname, '../../teleswap-main-package/Move.toml');
+    // let teleswapMainPackageMoveTomlContent = fs.readFileSync(teleswapMainPackageMoveTomlPath, 'utf8');
     
-    // Update the btcrelay address from 0x0 to the deployed package ID
-    teleswapMainPackageMoveTomlContent = teleswapMainPackageMoveTomlContent.replace(
-        /teleswap_main = "[^"]*"/,
-        `teleswap_main = "0x0"`
-    );
+    // // Update the btcrelay address from 0x0 to the deployed package ID
+    // teleswapMainPackageMoveTomlContent = teleswapMainPackageMoveTomlContent.replace(
+    //     /teleswap_main = "[^"]*"/,
+    //     `teleswap_main = "0x0"`
+    // );
     
-    fs.writeFileSync(teleswapMainPackageMoveTomlPath, teleswapMainPackageMoveTomlContent);
-    console.log('Reset teleswap-main-package/Move.toml');
+    // fs.writeFileSync(teleswapMainPackageMoveTomlPath, teleswapMainPackageMoveTomlContent);
+    // console.log('Reset teleswap-main-package/Move.toml');
 
     // Rebuild the package with updated dependencies
     console.log('Rebuilding package with updated dependencies...');

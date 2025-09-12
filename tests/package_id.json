@@ -1,10 +1,11 @@
 {
-  "lockerPackageId": "0x933d62ee347f47cde26e0491bbcf80ceab73477c5091a3edb8f79cec29d819dc",
-  "lockerAdminCapId": "0x85778f0ae077ae2a24c3c9e63f11ece7424a979c4e79e8ec662cb2629b2694b5",
-  "wbtcTreasuryCapId": "0xf474ae83d4380c294010b30535bdbd74c586e68878b230668de8208d2b6d7feb",
-  "lockerCapId": "0x377037832fe2e08e438d34a3b01f98ede78196b901453ef1d5905b526e003ff3",
-  "telebtcCapId": "0x2064df2a83d80acea477a4e8fc7f60e2143c05d280be022993b14de297a43a9e",
-  "telebtcTreasuryCapId": "0x75a658d21c2b10ce89bc42abb20a14f156b1d54c89b9de8173434ba02f222862",
-  "btcrelayCapId": "0x691e9acce56fecf236a1a6b504595a6b379299f5ef5235f83e8db253640d7337",
-  "burnRouterCapId": "0x718cd46ab95c5cb4e2cad1a279f40c9848674ea2d78b18fb9d66ffd4a99fec9a"
+  "burnRouterPackageId": "0x7a8b56c8cabf28213da72f10f745d87867fd5281cd2d36b4e47a4a830b10da0e",
+  "burnRouterAdminId": "0xdc15dd51b543951d122516c5c89e0c4a8ae6590ec4290b13902f2ebe5fdffd8f",
+  "telebtcCapId": "0xb77de4f225381e275651238f8a70583306fdb50967213d4be8ce089eb1b40299",
+  "telebtcTreasuryCapId": "0xd14e6d947afc9f9181b80e20abc9373ad6630d249373ca6f1a10aa3880052a16",
+  "telebtcAdminId": "0xe7815dbc1b33a09fb6f6bc5a6e0b14aca3d173bbfac3a63b590e77fce3cfea4d",
+  "btcrelayCapId": "0xfa194f4f097b5989a98e6bdda2f4bf754ca78628cb31412c01a579a83a79eef2",
+  "btcrelayAdminId": "0x1caf7fae66b31f17fd0f22f102c85b61355d4d0d0217458595bb032d1fca135b",
+  "burnRouterId": "0xb96fb719a58ed96a3ec46681d14a32ae6221d9f80bb25c6059960fd359e057e3",
+  "LockerCapId": "0xaa2c63f220ddcbb0dff6777f20bde084a1739247c16b0aec457a9b19e247aa16"
 }

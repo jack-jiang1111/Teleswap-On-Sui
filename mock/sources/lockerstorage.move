@@ -847,16 +847,6 @@ module teleswap::lockerstorage {
         locker.is_candidate
     }
 
-    /// @notice Gets the locker target address from a locking script
-    /// @dev This function looks up the target address associated with a locking script
-    /// @param locking_script The locking script to look up
-    /// @param locker_cap The locker capability object
-    /// @return The locker target address associated with the locking script
-    public fun get_locker_target_address_from_script(locking_script: vector<u8>, locker_cap: &LockerCap): address {
-        assert!(table::contains(&locker_cap.get_locker_target_address, locking_script), ERROR_INVALID_GET);
-        *table::borrow(&locker_cap.get_locker_target_address, locking_script)
-    }
-
     /// @notice Gets the reliability factor for a locker
     /// @dev This function returns the reliability factor assigned to a specific locker
     /// @param locker_cap The locker capability object

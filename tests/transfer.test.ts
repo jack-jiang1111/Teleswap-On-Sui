@@ -4,7 +4,7 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import { beforeAll, describe, expect, test, it } from "vitest";
 import { CCTransferFactory } from "./test_factory/cc_transfer_factory";
 import { Ed25519Keypair } from "@mysten/sui.js/keypairs/ed25519";
-import { getActiveKeypair } from "../scripts/sui.utils";
+import { getActiveKeypair } from "../scripts/helper/sui.utils";
 import { callMoveFunction, pure, object } from "./utils/move-helper";
 import { hexToBytes,printEvents } from './utils/utils';
 const CC_REQUESTS = require('./test_fixtures/ccTransferRequests.json');
@@ -20,7 +20,6 @@ describe('CCTransfer Test Suite', () => {
     let telebtcTreasuryCapId: string;
     let telebtcAdminId: string;
 
-    let btcrelayPackageId: string;
     let btcrelayCapId: string;
     let btcrelayAdminId: string;
     
@@ -138,7 +137,7 @@ describe('CCTransfer Test Suite', () => {
         const tx = new TransactionBlock();
         tx.setGasBudget(500000000);
         tx.moveCall({
-            target: `${btcrelayPackageId}::btcrelay_mock::set_mock_return`,
+            target: `${ccTransferRouterPackageId}::btcrelay::set_mock_return`,
             arguments: [tx.object(btcrelayCapId), tx.pure(isTrue)],
         });
         const result = await client.signAndExecuteTransactionBlock({
@@ -160,7 +159,6 @@ describe('CCTransfer Test Suite', () => {
             telebtcCapId,
             telebtcTreasuryCapId,
             telebtcAdminId,
-            btcrelayPackageId,
             btcrelayCapId,
             btcrelayAdminId,
             lockerCapabilityId
@@ -176,7 +174,7 @@ describe('CCTransfer Test Suite', () => {
         // Initialize CC Transfer Router using helper function
         const initResult = await callMoveFunction({
             packageId: ccTransferRouterPackageId,
-            moduleName: 'cc_transfer_router_test',
+            moduleName: 'cc_transfer_router_logic',
             functionName: 'initialize',
             arguments: [
                 pure(STARTING_BLOCK_NUMBER),
@@ -185,11 +183,15 @@ describe('CCTransfer Test Suite', () => {
                 pure(TELEPORTER_ADDRESS),
                 pure(TREASURY),
                 pure(LOCKER_PERCENTAGE_FEE),
+                pure(btcrelayCapId),
                 object(ccTransferRouterAdminId),
             ],
             signer: deployer
         });
-        expect(initResult.effects?.status?.status).toBe("success");
+        if(initResult.effects?.status?.status !== 'success') {
+            console.log(initResult.effects);
+            throw new Error('Transaction failed');
+        }
         console.log("CC Transfer Router Initialized");
 
         // Extract the shared router object ID from the initialization result
@@ -209,7 +211,6 @@ describe('CCTransfer Test Suite', () => {
     // Test for valid package IDs
     test('should have valid package IDs', () => {
         expect(ccTransferRouterPackageId).toBeTruthy();
-        expect(btcrelayPackageId).toBeTruthy();
         expect(ccTransferRouterAdminId).toBeTruthy();
         expect(telebtcCapId).toBeTruthy();
         expect(btcrelayCapId).toBeTruthy();
@@ -233,65 +234,65 @@ describe('CCTransfer Test Suite', () => {
             );
             const teleporterFee =  CC_REQUESTS.normalCCTransfer.teleporterFee;
 
-        const protocolFee = Math.floor(
-            CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 * PROTOCOL_PERCENTAGE_FEE / 10000
-        );
+            const protocolFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 * PROTOCOL_PERCENTAGE_FEE / 10000
+            );
 
-        // Calculate amount that user should have received
-        const receivedAmount = CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 - lockerFee - teleporterFee - protocolFee;
+            // Calculate amount that user should have received
+            const receivedAmount = CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 - lockerFee - teleporterFee - protocolFee;
 
-        // Create transaction to call the wrap function
-        const tx = new TransactionBlock();
-        tx.setGasBudget(500000000);
+            // Create transaction to call the wrap function
+            const tx = new TransactionBlock();
+            tx.setGasBudget(500000000);
 
-        // Call the wrap function (equivalent to ccTransfer in Solidity)
-        tx.moveCall({
-            target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
-            arguments: [
-                tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
-                // Create TxAndProof object
-                tx.moveCall({
-                    target: `${ccTransferRouterPackageId}::cc_transfer_router_storage::create_tx_and_proof`,
-                    arguments: [
-                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.version)),
-                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.vin)),
-                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.vout)),
-                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.locktime)),
-                        tx.pure(CC_REQUESTS.normalCCTransfer.blockNumber),
-                        tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.intermediateNodes)),
-                        tx.pure(CC_REQUESTS.normalCCTransfer.index),
-                    ],
-                    typeArguments: [],
-                }),
-                tx.pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
-                tx.object(lockerCapabilityId), // locker_cap - using the actual LockerCapability object
-                tx.object(btcrelayCapId), // relay
-                tx.object(telebtcCapId), // telebtc_cap
-                tx.object(telebtcTreasuryCapId), // treasury_cap
-            ],
-            typeArguments: [],
-        });
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        // Execute the transaction
-        const result = await client.signAndExecuteTransactionBlock({
-            transactionBlock: tx,
-            signer: deployer,
-            options: { showEffects: true, showEvents: true }
-        });
-        // console.log("result", result);
-        // printEvents(result);
-        expect(result.effects?.status?.status).toBe("success");
-        console.log("CC Transfer executed successfully");
-        await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1 second util status update
-        // Check fees and balances
-        await checkFees(
-            CC_REQUESTS.normalCCTransfer.recipientAddress,
-            receivedAmount,
-            teleporterFee,
-            protocolFee,
-            lockerFee,
-            initialBalances
-        );
+            // Call the wrap function (equivalent to ccTransfer in Solidity)
+            tx.moveCall({
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
+                arguments: [
+                    tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
+                    // Create TxAndProof object
+                    tx.object(tx.moveCall({
+                        target: `${ccTransferRouterPackageId}::cc_transfer_router_storage::create_tx_and_proof`,
+                        arguments: [
+                            tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.version)),
+                            tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.vin)),
+                            tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.vout)),
+                            tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.locktime)),
+                            tx.pure(CC_REQUESTS.normalCCTransfer.blockNumber),
+                            tx.pure(hexToBytes(CC_REQUESTS.normalCCTransfer.intermediateNodes)),
+                            tx.pure(CC_REQUESTS.normalCCTransfer.index),
+                        ],
+                        typeArguments: [],
+                    })),
+                    tx.pure(hexToBytes(LOCKER1_LOCKING_SCRIPT)),
+                    tx.object(lockerCapabilityId), // locker_cap - using the actual LockerCapability object
+                    tx.object(btcrelayCapId), // relay
+                    tx.object(telebtcCapId), // telebtc_cap
+                    tx.object(telebtcTreasuryCapId), // treasury_cap
+                ],
+                typeArguments: [],
+            });
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Execute the transaction
+            const result = await client.signAndExecuteTransactionBlock({
+                transactionBlock: tx,
+                signer: deployer,
+                options: { showEffects: true, showEvents: true }
+            });
+            //console.log("result", result);
+            // printEvents(result);
+            expect(result.effects?.status?.status).toBe("success");
+            console.log("CC Transfer executed successfully");
+            await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1 second util status update
+            // Check fees and balances
+            await checkFees(
+                CC_REQUESTS.normalCCTransfer.recipientAddress,
+                receivedAmount,
+                teleporterFee,
+                protocolFee,
+                lockerFee,
+                initialBalances
+            );
         }, 60000);
 
         it('Mints teleBTC for normal cc transfer request (zero teleporter fee)', async () => {
@@ -320,7 +321,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function (equivalent to ccTransfer in Solidity)
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object
@@ -410,7 +411,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function (equivalent to ccTransfer in Solidity)
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object
@@ -442,8 +443,8 @@ describe('CCTransfer Test Suite', () => {
                 signer: deployer,
                 options: { showEffects: true, showEvents: true }
             });
-            console.log("result", result);
-            printEvents(result);
+            //console.log("result", result);
+            //printEvents(result);
             expect(result.effects?.status?.status).toBe("success");
             console.log("CC Transfer executed successfully");
             await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1 second util status update
@@ -486,7 +487,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function with block number less than starting block number
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object with old block number
@@ -520,7 +521,7 @@ describe('CCTransfer Test Suite', () => {
             });
             expect(result.effects?.status?.status).toBe("failure");
             expect(result.effects?.status?.error).toMatch(
-                /MoveAbort.*cc_transfer_router_test.*20/
+                /MoveAbort.*cc_transfer_router_logic.*328/
             );
             
         }, 60000);
@@ -534,7 +535,7 @@ describe('CCTransfer Test Suite', () => {
             tx1.setGasBudget(500000000);
 
             tx1.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx1.object(ccTransferRouterId),
                     tx1.moveCall({
@@ -566,7 +567,7 @@ describe('CCTransfer Test Suite', () => {
             });
             expect(result.effects?.status?.status).toBe("failure");
             expect(result.effects?.status?.error).toMatch(
-                /MoveAbort.*cc_transfer_router_test.*21/
+                /MoveAbort.*cc_transfer_router_logic.*329/ // error code for EREQUEST_USED
             );
             console.log("Second transaction failed as expected - request already used");
         }, 60000);
@@ -584,7 +585,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function with UnfinalizedRequest data
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object with UnfinalizedRequest data
@@ -619,7 +620,7 @@ describe('CCTransfer Test Suite', () => {
             });
             expect(result.effects?.status?.status).toBe("failure");
             expect(result.effects?.status?.error).toMatch(
-                /MoveAbort.*cc_transfer_router_test.*23/
+                /MoveAbort.*cc_transfer_router_logic.*331/ // error code for ETX_NOT_FINALIZED
             );
             console.log("Transaction failed as expected - request not finalized on relay");
 
@@ -641,7 +642,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function with normalCCTransfer_invalidFee data
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object with normalCCTransfer_invalidFee data
@@ -676,8 +677,7 @@ describe('CCTransfer Test Suite', () => {
             });
             expect(result.effects?.status?.status).toBe("failure");
             expect(result.effects?.status?.error).toMatch(
-                /MoveAbort.*cc_transfer_router_test.*15/
-            );
+                /MoveAbort.*cc_transfer_router_logic.*325/); // error code for EINVALID_FEE
             console.log("Transaction failed as expected - percentage fee out of range");
         }, 60000);
         
@@ -691,7 +691,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function with InvalidAppId data
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object with InvalidAppId data
@@ -726,7 +726,7 @@ describe('CCTransfer Test Suite', () => {
             });
             expect(result.effects?.status?.status).toBe("failure");
             expect(result.effects?.status?.error).toMatch(
-                /MoveAbort.*cc_transfer_router_test.*14/
+                /MoveAbort.*cc_transfer_router_logic.*324/ // error code for EINVALID_APP_ID
             );
             console.log("Transaction failed as expected - app id is invalid");
         }, 60000);
@@ -741,7 +741,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function with InvalidSpeed data
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object with InvalidSpeed data
@@ -776,7 +776,7 @@ describe('CCTransfer Test Suite', () => {
             });
             expect(result.effects?.status?.status).toBe("failure");
             expect(result.effects?.status?.error).toMatch(
-                /MoveAbort.*cc_transfer_router_test.*16/
+                /MoveAbort.*cc_transfer_router_logic.*326/ // error code for EINVALID_SPEED
             );
             console.log("Transaction failed as expected - speed is out of range");
         }, 60000);
@@ -791,7 +791,7 @@ describe('CCTransfer Test Suite', () => {
 
             // Call the wrap function with InvalidSpeed data
             tx.moveCall({
-                target: `${ccTransferRouterPackageId}::cc_transfer_router_test::wrap`,
+                target: `${ccTransferRouterPackageId}::cc_transfer_router_logic::wrap`,
                 arguments: [
                     tx.object(ccTransferRouterId), // router - the shared CCTransferRouterCap object
                     // Create TxAndProof object with InvalidSpeed data
@@ -826,7 +826,7 @@ describe('CCTransfer Test Suite', () => {
             });
             expect(result.effects?.status?.status).toBe("failure");
             expect(result.effects?.status?.error).toMatch(
-                /MoveAbort.*cc_transfer_router_test.*13/
+                /MoveAbort.*cc_transfer_router_logic.*323/ // error code for EZERO_INPUT_AMOUNT
             );
             console.log("Transaction failed as expected - speed is out of range");
         }, 60000);

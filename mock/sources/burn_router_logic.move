@@ -156,7 +156,7 @@ module teleswap::burn_router_logic {
         ctx: &mut TxContext
     ): u64 {
         // Call the connector function to avoid circular dependency
-        burn_router_locker_connector::unwrap(
+        burn_router_locker_connector::unwrap_mock(
             burn_router,
             amount_coin,
             user_script,
@@ -250,7 +250,7 @@ module teleswap::burn_router_logic {
     //         ctx
     //     )
     // }
-
+    */
     /// @notice Checks the correctness of a burn proof (Bitcoin tx) and marks requests as paid.
     /// @dev Only the locker or oracle can call. Updates isTransferred flag for paid requests.
     /// @param burn_router The BurnRouter object
@@ -542,7 +542,7 @@ module teleswap::burn_router_logic {
         };
         event::emit(event);
     }
-
+/*
     // fun exchange_helper(
     //     config: &GlobalConfig,
     //     pool_usdc_sui: &mut pool::Pool<USDC, SUI>,

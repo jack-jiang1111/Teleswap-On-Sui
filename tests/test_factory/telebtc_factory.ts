@@ -1,42 +1,13 @@
 import { expect } from 'vitest';
 import { getFullnodeUrl, SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
-import { getActiveKeypair } from '../../scripts/sui.utils';
+import { getActiveKeypair } from '../../scripts/helper/sui.utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import { verifyUpgradeCap } from '../utils/utils';
 import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 // Function to update Move.toml with actual package IDs
-function ResetTelebtcMoveToml() {
 
-    // Update telebtc-package/Move.toml
-    const telebtcMovetomlPath = path.join(__dirname, '../../telebtc-package/Move.toml');
-    let telebtcMoveTomlContent = fs.readFileSync(telebtcMovetomlPath, 'utf8');
-    
-    // Update the btcrelay address from 0x0 to the deployed package ID
-    telebtcMoveTomlContent = telebtcMoveTomlContent.replace(
-        /telebtc = "[^"]*"/,
-        `telebtc = "0x0"`
-    );
-    
-    fs.writeFileSync(telebtcMovetomlPath, telebtcMoveTomlContent);
-    console.log('Reset telebtc-package/Move.toml');
-
-    // Rebuild the package with updated dependencies
-    console.log('Rebuilding package with updated dependencies...');
-    const { execSync } = require('child_process');
-    try {
-        const teleswapMainPackagePath = path.join(__dirname, '../../telebtc-package');
-        execSync('sui move build --skip-fetch-latest-git-deps', { 
-            stdio: 'inherit',
-            cwd: teleswapMainPackagePath
-        });
-        console.log('Package rebuilt successfully');
-    } catch (error) {
-        console.error('Failed to rebuild package:', error);
-        throw error;
-    }
-}
 export async function TeleBTCFactory(): Promise<{
     deployer: Ed25519Keypair,
     packageId: string,
@@ -53,10 +24,9 @@ export async function TeleBTCFactory(): Promise<{
     let capId = "";
     let adminId = "";
 
-    ResetTelebtcMoveToml()
     // Get module bytecode
     const telebtcModule = fs.readFileSync(
-        path.join(__dirname, '../../telebtc-package/build/telebtc/bytecode_modules/telebtc.mv')
+        path.join(__dirname, '../../mock/build/teleswap/bytecode_modules/telebtc.mv')
     );
     console.log('Deploying telebtc package...');
     let tx = new TransactionBlock();
