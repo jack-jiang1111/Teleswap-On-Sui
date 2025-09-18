@@ -11,7 +11,27 @@ import { verifyUpgradeCap } from '../../tests/utils/utils';
 // ts-node ./01-deploy_btc_relay.ts [network]
 // e.g. ts-node ./01-deploy_btc_relay.ts mainnet
 
+function resetBtcrelayAddressInToml() {
+    const tomlPath = path.join(__dirname, '../../btcrelay-package/Move.toml');
+    try {
+        if (fs.existsSync(tomlPath)) {
+            const src = fs.readFileSync(tomlPath, 'utf8');
+            const updated = updateBtcrelayAddressInToml(src, '0x0');
+            if (updated !== src) {
+                fs.writeFileSync(tomlPath, updated);
+                console.log('Reset btcrelay address to 0x0 in Move.toml');
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to reset Move.toml:', (e as Error).message);
+    }
+}
+
 async function main() {
+    // Reset Move.toml to use 0x0 for btcrelay address before deployment
+    console.log('Resetting Move.toml to use 0x0 for btcrelay address...');
+    resetBtcrelayAddressInToml();
+    
     console.log('Building package...');
     execSync('sui move build', { cwd: path.join(__dirname, '../../btcrelay-package'), stdio: 'inherit' });
 
@@ -70,30 +90,28 @@ async function main() {
     let upgradeCapId = "";
     let relayAdminId = "";
     await new Promise(resolve => setTimeout(resolve, 3000)); // wait for 3s to make sure the transaction is executed
-
+    if(result.effects?.status?.status !== 'success') {
+        console.log(result.effects);
+        throw new Error('Transaction failed');
+    }
     // Verify all created objects and find UpgradeCap and RELAY_ADMIN
     console.log('\nVerifying all created objects:');
     for (const obj of result.effects?.created || []) {
         const objectId = obj.reference.objectId;
-        const isUpgradeCap = await verifyUpgradeCap(client, objectId);
-        // console.log(`Object ID: ${objectId}`);
+        const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
+        const type = objInfo.data?.type || '';
 
         // There will be two objects created under deployer's address: UpgradeCap and RELAY_ADMIN
         // we have to identify which one is the UpgradeCap and which one is the RELAY_ADMIN
-        if (obj.owner === 'Immutable'){
+        if(type === "package") {
             // This is the package ID
             packageId = objectId;
         }
-        if (typeof obj.owner === 'object' && 
-            obj.owner !== null && 
-            'AddressOwner' in obj.owner && 
-            (obj.owner as any).AddressOwner === activeAddress) {
-            // Check if this is the UpgradeCap
-            if (isUpgradeCap) {
-                upgradeCapId = objectId;
-            } else{
-                relayAdminId = objectId;
-            }
+        else if (type.includes('RELAY_ADMIN')) {
+            relayAdminId = objectId;
+        }
+        else if (type.includes('UpgradeCap')) {
+            upgradeCapId = objectId;
         }
     }
 

@@ -2,16 +2,16 @@
 
 [move]
 version = 3
-manifest_digest = "AF9B3D7F2D72B5B8F16EA1EF7A4C1A3551E56BB20E44674F44979002382D8358"
+manifest_digest = "D605C03C82DFA02230FAC8AC398EEDA016A4157AB5985FA227319A029F935B03"
 deps_digest = "CAFAD8A7CF51067FB4358215BECB86BD100DD64E57C2AC8A7AE7D74B688F5965"
 dependencies = [
   { id = "BridgedBTC", name = "BridgedBTC" },
-  { id = "BridgedUSDC", name = "BridgedUSDC" },
   { id = "BridgedUSDT", name = "BridgedUSDT" },
   { id = "CetusClmm", name = "CetusClmm" },
   { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
   { id = "btcrelay", name = "btcrelay" },
+  { id = "usdc", name = "usdc" },
 ]
 
 [[move.package]]
@@ -26,16 +26,7 @@ dependencies = [
 
 [[move.package]]
 id = "BridgedBTC"
-source = { local = "..\\mock\\mock_coins\\btc" }
-
-dependencies = [
-  { id = "MoveStdlib", name = "MoveStdlib" },
-  { id = "Sui", name = "Sui" },
-]
-
-[[move.package]]
-id = "BridgedUSDC"
-source = { local = "..\\mock\\mock_coins\\usdc" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "main", subdir = "bridge/move/tokens/btc" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -44,7 +35,7 @@ dependencies = [
 
 [[move.package]]
 id = "BridgedUSDT"
-source = { local = "..\\mock\\mock_coins\\usdt" }
+source = { git = "https://github.com/MystenLabs/sui.git", rev = "main", subdir = "bridge/move/tokens/usdt" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -113,6 +104,33 @@ source = { local = "..\\btcrelay-package" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
+]
+
+[[move.package]]
+id = "stablecoin"
+source = { git = "https://github.com/circlefin/stablecoin-sui.git", rev = "master", subdir = "packages\\stablecoin" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+  { id = "sui_extensions", name = "sui_extensions" },
+]
+
+[[move.package]]
+id = "sui_extensions"
+source = { git = "https://github.com/circlefin/stablecoin-sui.git", rev = "master", subdir = "packages\\sui_extensions" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+]
+
+[[move.package]]
+id = "usdc"
+source = { git = "https://github.com/circlefin/stablecoin-sui.git", rev = "master", subdir = "packages/usdc" }
+
+dependencies = [
+  { id = "Sui", name = "Sui" },
+  { id = "stablecoin", name = "stablecoin" },
+  { id = "sui_extensions", name = "sui_extensions" },
 ]
 
 [move.toolchain-version]

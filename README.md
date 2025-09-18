@@ -98,6 +98,7 @@ npm test -- tests/locker.test.ts
 ```
 
 8. Deploy the contract:
+before deploy the contract, need to fetch some test coin on faceut
 ```bash
 # Deploy the contract to mainnet/testnet/local 
 npx ts-node scripts/deploy/01-deploy_btc_relay.ts [network]

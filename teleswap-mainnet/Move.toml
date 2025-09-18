@@ -16,6 +16,6 @@ btcrelay = { local = "../btcrelay-package" }
 [addresses]
 teleswap = "0x0"
 sui = "0x2"
-btcrelay = "0x934683c693fbc5964b4a998f0ff93167aacb94e9926773526833b16e0945772d"
+btcrelay = "0xe7761e113edf177fbce9ae9f5d264c0ff27c1e21bb69130d43686045efe20ab7"
 cetus_clmm = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb"
 

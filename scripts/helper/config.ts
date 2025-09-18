@@ -8,7 +8,7 @@ export const networks = {
         name: 'devnet'
     },
     testnet: {
-        url: 'https://fullnode.testnet.sui.io:443',
+        url: 'https://sui-testnet-rpc.publicnode.com',
         name: 'testnet'
     },
     mainnet: {

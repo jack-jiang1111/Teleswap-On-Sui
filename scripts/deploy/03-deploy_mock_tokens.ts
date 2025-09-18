@@ -9,7 +9,7 @@ import { getActiveKeypair } from '../helper/sui.utils';
 async function main() {
   const networkName = process.argv[2];
   const network = getNetwork(networkName);
-  if (network.name !== 'testnet') {
+  if (network.name !== 'testnet' && network.name !== 'devnet') {
     console.log('Mock token deployment is only for testnet. Skipping.');
     process.exit(0);
   }
@@ -65,10 +65,14 @@ async function main() {
 
     let packageId = '';
     for (const obj of result.effects?.created || []) {
-      if (obj.owner === 'Immutable') {
-        packageId = obj.reference.objectId;
-        break;
-      }
+      const objectId = obj.reference.objectId;
+        const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
+        const type = objInfo.data?.type || '';
+
+        if(type === "package") {
+            // This is the package ID
+            packageId = objectId;
+        }
     }
     if (!packageId) {
       throw new Error(`Failed to determine packageId for ${dir}`);

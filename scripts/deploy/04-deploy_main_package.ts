@@ -9,8 +9,8 @@ import { getActiveKeypair } from '../helper/sui.utils';
 async function main() {
   const networkName = process.argv[2];
   const network = getNetwork(networkName);
-  if (network.name !== 'testnet' && network.name !== 'mainnet') {
-    throw new Error('Network must be testnet or mainnet');
+  if (network.name !== 'testnet' && network.name !== 'mainnet' && network.name !== 'devnet') {
+    throw new Error('Network must be testnet or mainnet or devnet');
   }
 
   function fetchWithTimeout(url: RequestInfo | URL, options: RequestInit = {}, timeout = 120_000): Promise<Response> { // 120 seconds
@@ -33,7 +33,7 @@ async function main() {
   // Select package dir
   const pkgDir = path.join(
     __dirname,
-    network.name === 'testnet' ? '../../teleswap-testnet' : '../../teleswap-mainnet'
+    (network.name === 'testnet' || network.name === 'devnet') ? '../../teleswap-testnet' : '../../teleswap-mainnet'
   );
 
   console.log(`Building package at ${pkgDir} ...`);
@@ -127,11 +127,6 @@ async function main() {
   }
   for (const obj of result.effects?.created || []) {
     const objectId = obj.reference.objectId;
-    // package id by owner=Immutable
-    if (obj.owner === 'Immutable') {
-      mainPackageId = objectId;
-      continue;
-    }
     // inspect type
     try {
       const info = await client.getObject({ id: objectId, options: { showType: true } });
@@ -144,6 +139,7 @@ async function main() {
       else if (type.includes('TELEBTC_ADMIN')) telebtcAdminId = objectId;
       else if (type.includes('TeleBTCCap')) telebtcCapId = objectId;
       else if (type.includes('TreasuryCap') && type.includes('telebtc::TELEBTC')) telebtcTreasuryCapId = objectId;
+      else if (type.includes('package')) mainPackageId = objectId;
     } catch {}
   }
 
