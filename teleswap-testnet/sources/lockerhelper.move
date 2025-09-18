@@ -7,7 +7,7 @@ module teleswap::lockerhelper {
     
     // Import burn router and related modules
     use teleswap::burn_router_logic::{Self};
-    use teleswap::btcrelay::{Self, BTCRelay};
+    use btcrelay::btcrelay::{Self, BTCRelay};
     use teleswap::burn_router_storage::{Self, BurnRouter};
     use teleswap::burn_router_locker_connector::{Self};
     

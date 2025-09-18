@@ -1,0 +1,108 @@
+Your next stage of work in finishing the deploy script
+in scripts/deploy, there are two working deploy scripts
+
+need to do a little modification, after deploy the btcrelay package, update the address in teleswap-testnet/Move.toml and teleswap-mainnet/Move.toml and testnet toml
+you can refer some code in the test files,tests/test_factory and burn,locker,telebtc,transfer test.ts file
+For next part, we need a deploy script for deploying the teleswap-main-package
+if the input network is testnet, cd into teleswap-testnet, if it's local, cd into mock, if it's mainnet, cd into teleswap-mainnet
+after cd, compile with sui move build
+
+Then start to deploy.
+we need to following deployment script
+03-testnet token, if it's testnet, deploy ./mock/mock_coins
+there are three folders in the mock_coins: btc/usdt/usdc
+we will need to deploy them seperately, and record the package id into package_id.json
+if the input is mainnet, skip it do nothing
+
+04-deploy-main package, deploy all the files in the testnet folder or mainnet folder, depending on the input network
+simialr to btcrelay, you will get a updrade object return from init. but you also get BURN_ROUTER_ADMIN,ExchangeAdmin,CC_TRANSFER_ADMIN,LockerAdminCap,TELEBTC_ADMIN,TeleBTCCapa telebtc treasury cap
+use type match to capture those, recorde the package id and all these object id into package_id.json
+you can always find some reused code in the test folder, be sure to read them before implementing
+
+05-initialize package
+this script will initailze the package, first define lots of variables, hardcode them (user will change it during deployment)
+then initialize package, burn,locker,cc_transfer,exchange are the four packages need to be initialized
+refer to the test files for calling the initialize function
+
+Q&A:
+Move.toml updates
+Which named addresses should be updated after btcrelay deploy? 
+Only btcrelay 
+
+You mention “testnet toml” alongside teleswap-testnet/Move.toml and teleswap-mainnet/Move.toml. Is there a third file (path?), or just those two?
+JUST THESE TWO
+
+Network selection and working dirs
+Accepted inputs: local, testnet, mainnet?
+ONLY TESTNET AND MAINNET
+
+Map to directories: local -> mock, testnet -> teleswap-testnet, mainnet -> teleswap-mainnet correct?
+yes
+
+Package_id.json schema
+We already output { btcrelayPackageId, btcrelayUpgradeCapId, btcrelayAdminId }. For later steps, do you want a single consolidated scripts/deploy/package_id.json file that accumulates all IDs (btcrelay + mock tokens + main package IDs), or a per-step file?
+a single file containing all the package ids
+
+For mock tokens, do you want fields like mockBtcPackageId, mockUsdtPackageId, mockUsdcPackageId?
+sure
+
+Mock tokens deployment (03)
+Exact paths to deploy: ./mock/mock_coins/btc, ./mock/mock_coins/usdt, ./mock/mock_coins/usdc?
+yes
+
+Should we compile and publish each subpackage separately and append their package IDs to package_id.json?
+for the token contract, yes
+
+Any specific dependencies list to pass to publish, or use the package’s own BuildInfo?
+no, each token contract is independent
+
+Main package deployment (04)
+Which folder to publish: “deploy all the files in the testnet/mainnet folder” means publish the Move package at that directory root (not individual modules), correct?
+yes, publish all the files in the testnet/mainnet folder depending on the input network
+
+From publish result, besides UpgradeCap, we need to identify and record:
+BURN_ROUTER_ADMIN, ExchangeAdmin, CC_TRANSFER_ADMIN, LockerAdminCap, TELEBTC_ADMIN, TeleBTCCap, TreasuryCap<TELEBTC> — confirm all of these should be captured.
+yes
+
+Do you want the script to type-match by Sui object types (e.g., StructType matching) or by semantics (owner, shape, etc.)? If by type, please confirm the exact type names.
+exact type names, you can find how we capture the type names in the test files (factory files)
+
+Initialization (05)
+Which initialize functions to call in each module (names + module paths)? Burn, locker, cc_transfer, exchange: confirm the exact entry functions and parameter lists you expect.
+refer to the test files, 
+
+You said “hardcode them (user will change it during deployment)”. Should we read params from a config JSON/TS file under scripts/helper/config.ts or inline constants in the script?
+read from the config file is a good idea, let's do that, also change the btcrelay file to read from the config file
+
+Any ordering constraints between subsystem initializations?
+no,any order is fine
+
+Execution environment
+Use the active default keypair from sui client (like we did for btcrelay), or pass a keypair path?
+use the active default keypair from sui client
+
+Any required gas budget, delays between txs, or re-try logic?
+no retry, hardcode the gas budget to 0.5 sui just like in btcrelay
+
+Idempotency and safety
+Should scripts overwrite package_id.json or merge/append?
+appending, if same field is already present, overwrite it
+
+If a package is already deployed (package_id present), should the script skip deployment or force re-deploy?
+force re-deploy
+
+Script organization
+Do you want these as separate scripts (03-, 04-, 05-) under scripts/deploy/ mirroring the numbering in the instructions?
+yes, in the deploy folder
+
+Preferred invocation pattern: ts-node scripts/deploy/03-deploy_mock_tokens.ts [network], etc.?
+yes
+
+
+cetus testnet address: 0xb2a1d27337788bda89d350703b8326952413bd94b35b9b573ac8401b9803d018
+mainnet address: 0x75b2e9ecad34944b8d0c874e568c90db0cf9437f0d7392abfd4cb902972f3e40
+
+if depoly on mainnet
+usdc package id: 0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7
+wbtc package id:0x027792d9fed7f9844eb4839566001bb6f6cb4804f66aa2da6fe1ee242d896881
+usdt package id:0x375f70cf2ae4c00bf37117d0c85a2c71545e6ee05c4a5c7d282cd66a4504b068

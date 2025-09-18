@@ -4,7 +4,7 @@ import { TransactionBlock } from '@mysten/sui.js/transactions';
 import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
-import { getNetwork } from '../config';
+import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
 import { verifyUpgradeCap } from '../../tests/utils/utils';
 // run the file to deploy the package
@@ -13,7 +13,7 @@ import { verifyUpgradeCap } from '../../tests/utils/utils';
 
 async function main() {
     console.log('Building package...');
-    execSync('sui move build', { stdio: 'inherit' });
+    execSync('sui move build', { cwd: path.join(__dirname, '../../btcrelay-package'), stdio: 'inherit' });
 
     // Get network from command line args or use default
     const networkName = process.argv[2];
@@ -87,7 +87,7 @@ async function main() {
         if (typeof obj.owner === 'object' && 
             obj.owner !== null && 
             'AddressOwner' in obj.owner && 
-            obj.owner.AddressOwner === activeAddress) {
+            (obj.owner as any).AddressOwner === activeAddress) {
             // Check if this is the UpgradeCap
             if (isUpgradeCap) {
                 upgradeCapId = objectId;
@@ -110,13 +110,58 @@ async function main() {
         console.log('Package ID:', packageId);
         console.log('Upgrade Cap ID:', upgradeCapId);
         console.log('RELAY_ADMIN ID:', relayAdminId);
-        fs.writeFileSync(
-            'btc_relay.json', 
-            JSON.stringify({ packageId, upgradeCapId, relayAdminId }, null, 2)
-        );
+
+        // Merge/append to package_id.json in main directory
+        const outPath = path.join(__dirname, '../../package_id.json');
+        let current: any = {};
+        if (fs.existsSync(outPath)) {
+            try { current = JSON.parse(fs.readFileSync(outPath, 'utf8')); } catch {}
+        }
+        current.btcrelayPackageId = packageId;
+        current.btcrelayUpgradeCapId = upgradeCapId;
+        current.btcrelayAdminId = relayAdminId;
+        fs.writeFileSync(outPath, JSON.stringify(current, null, 2));
+
+        // Update Move.toml named address 'btcrelay' for btcrelay-package and both testnet and mainnet packages
+        const tomlPaths = [
+            path.join(__dirname, '../../btcrelay-package/Move.toml'),
+            path.join(__dirname, '../../teleswap-testnet/Move.toml'),
+            path.join(__dirname, '../../teleswap-mainnet/Move.toml'),
+        ];
+        for (const p of tomlPaths) {
+            try {
+                if (!fs.existsSync(p)) continue;
+                const src = fs.readFileSync(p, 'utf8');
+                const updated = updateBtcrelayAddressInToml(src, packageId);
+                if (updated !== src) {
+                    fs.writeFileSync(p, updated);
+                    console.log(`Updated btcrelay address in ${p}`);
+                }
+            } catch (e) {
+                console.warn(`Failed to update Move.toml at ${p}:`, (e as Error).message);
+            }
+        }
     } else {
         console.error('Deployment failed:', result.effects?.status);
     }
+}
+
+function updateBtcrelayAddressInToml(toml: string, pkgId: string): string {
+    // Replace a line like: btcrelay = "0x..." (or without quotes)
+    const re = /(btcrelay\s*=\s*)("?)(0x[0-9a-fA-F]+)("?)/;
+    if (re.test(toml)) {
+        return toml.replace(re, `$1"${pkgId}"`);
+    }
+    // If not present, try to append under [addresses]
+    if (toml.includes('[addresses]')) {
+        return toml.replace(/\[addresses\][^\n]*\n/, (m) => m + `btcrelay = "${pkgId}"
+`);
+    }
+    // Fallback: append at end
+    return toml + `
+[addresses]
+btcrelay = "${pkgId}"
+`;
 }
 
 async function getBuildedModule(name: string): Promise<Uint8Array> {

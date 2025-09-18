@@ -2,16 +2,16 @@
 
 [move]
 version = 3
-manifest_digest = "EA8F9FA506F4768E70BF09405143572F938343336F0127C6BE0672D44341DB7C"
+manifest_digest = "5E8355F64913F60AC589937531B5540082C0F7BC573D7DA33466FC7AC3639B92"
 deps_digest = "CAFAD8A7CF51067FB4358215BECB86BD100DD64E57C2AC8A7AE7D74B688F5965"
 dependencies = [
   { id = "BridgedBTC", name = "BridgedBTC" },
+  { id = "BridgedUSDC", name = "BridgedUSDC" },
   { id = "BridgedUSDT", name = "BridgedUSDT" },
   { id = "CetusClmm", name = "CetusClmm" },
   { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
   { id = "btcrelay", name = "btcrelay" },
-  { id = "usdc", name = "usdc" },
 ]
 
 [[move.package]]
@@ -26,7 +26,16 @@ dependencies = [
 
 [[move.package]]
 id = "BridgedBTC"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "main", subdir = "bridge/move/tokens/btc" }
+source = { local = "..\\mock\\mock_coins\\btc" }
+
+dependencies = [
+  { id = "MoveStdlib", name = "MoveStdlib" },
+  { id = "Sui", name = "Sui" },
+]
+
+[[move.package]]
+id = "BridgedUSDC"
+source = { local = "..\\mock\\mock_coins\\usdc" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -35,7 +44,7 @@ dependencies = [
 
 [[move.package]]
 id = "BridgedUSDT"
-source = { git = "https://github.com/MystenLabs/sui.git", rev = "main", subdir = "bridge/move/tokens/usdt" }
+source = { local = "..\\mock\\mock_coins\\usdt" }
 
 dependencies = [
   { id = "MoveStdlib", name = "MoveStdlib" },
@@ -57,15 +66,18 @@ dependencies = [
 
 [[move.package]]
 id = "IntegerMate"
-source = { git = "https://github.com/CetusProtocol/integer-mate.git", rev = "sui-v1.2.0", subdir = "sui" }
+source = { git = "https://github.com/CetusProtocol/integer-mate.git", rev = "mainnet-v1.3.0", subdir = "" }
 
 dependencies = [
+  { id = "Bridge", name = "Bridge" },
+  { id = "MoveStdlib", name = "MoveStdlib" },
   { id = "Sui", name = "Sui" },
+  { id = "SuiSystem", name = "SuiSystem" },
 ]
 
 [[move.package]]
 id = "MoveSTL"
-source = { git = "https://github.com/CetusProtocol/move-stl.git", rev = "mainnet-v1.48.2", subdir = "sui" }
+source = { git = "https://github.com/CetusProtocol/move-stl.git", rev = "mainnet-v1.3.0", subdir = "" }
 
 dependencies = [
   { id = "Bridge", name = "Bridge" },
@@ -101,33 +113,6 @@ source = { local = "..\\btcrelay-package" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
-]
-
-[[move.package]]
-id = "stablecoin"
-source = { git = "https://github.com/circlefin/stablecoin-sui.git", rev = "master", subdir = "packages\\stablecoin" }
-
-dependencies = [
-  { id = "Sui", name = "Sui" },
-  { id = "sui_extensions", name = "sui_extensions" },
-]
-
-[[move.package]]
-id = "sui_extensions"
-source = { git = "https://github.com/circlefin/stablecoin-sui.git", rev = "master", subdir = "packages\\sui_extensions" }
-
-dependencies = [
-  { id = "Sui", name = "Sui" },
-]
-
-[[move.package]]
-id = "usdc"
-source = { git = "https://github.com/circlefin/stablecoin-sui.git", rev = "master", subdir = "packages/usdc" }
-
-dependencies = [
-  { id = "Sui", name = "Sui" },
-  { id = "stablecoin", name = "stablecoin" },
-  { id = "sui_extensions", name = "sui_extensions" },
 ]
 
 [move.toolchain-version]

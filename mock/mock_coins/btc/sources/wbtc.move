@@ -3,15 +3,14 @@
 
 module bridged_btc::btc {
     use std::option;
-
-    use sui::coin;
+    use sui::coin::{Self, Coin, TreasuryCap};
     use sui::transfer;
-    use sui::tx_context;
-    use sui::tx_context::TxContext;
+    use sui::tx_context::{Self, TxContext};
 
     struct BTC has drop {}
 
     const DECIMAL: u8 = 8;
+    const EZERO_VALUE: u64 = 404;
 
     fun init(otw: BTC, ctx: &mut TxContext) {
         let (treasury_cap, metadata) = coin::create_currency(
@@ -25,5 +24,25 @@ module bridged_btc::btc {
         );
         transfer::public_freeze_object(metadata);
         transfer::public_transfer(treasury_cap, tx_context::sender(ctx));
+    }
+    // Minting function - anyone can mint for testing
+    public fun mint(
+        treasury_cap: &mut TreasuryCap<BTC>,
+        amount: u64,
+        ctx: &mut TxContext
+    ): Coin<BTC> {
+        assert!(amount > 0, EZERO_VALUE);
+        coin::mint(treasury_cap, amount, ctx)
+    }
+
+    // Burning function - anyone can burn for testing
+    public fun burn(
+        treasury_cap: &mut TreasuryCap<BTC>,
+        coins: Coin<BTC>,
+    ): bool {
+        let amount = coin::value(&coins);
+        assert!(amount > 0, EZERO_VALUE);
+        coin::burn(treasury_cap, coins);
+        true
     }
 }

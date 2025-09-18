@@ -1,7 +1,8 @@
 import { SuiClient } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import * as fs from 'fs';
-import { getNetwork } from '../config';
+import * as path from 'path';
+import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
 
 async function main() {
@@ -16,9 +17,9 @@ async function main() {
     const keypair = await getActiveKeypair();
     const activeAddress = keypair.toSuiAddress();
 
-    // Read package ID from the JSON file
-    const packageData = JSON.parse(fs.readFileSync('btc_relay.json', 'utf8'));
-    const packageId = packageData.packageId;
+    // Read package ID from the JSON file in main directory
+    const packageData = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package_id.json'), 'utf8'));
+    const packageId = packageData.btcrelayPackageId;
     console.log('Using package ID:', packageId);
 
     // Parameters for initialization
@@ -65,7 +66,7 @@ async function main() {
             tx.pure(height),
             tx.pure(period_start_hex),
             tx.pure(finalization_parameter),
-            tx.object(packageData.relayAdminId), // Pass the relayAdmin object
+            tx.object(packageData.btcrelayAdminId), // Pass the relayAdmin object
         ]
     });
 
@@ -93,17 +94,17 @@ async function main() {
         let btcRelayId = newBtcRelay.reference.objectId;
         if (btcRelayId) {
             // Read existing JSON file
-            const existingData = JSON.parse(fs.readFileSync('btc_relay.json', 'utf8'));
+            const existingData = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package_id.json'), 'utf8'));
             
             // Append new data
             const updatedData = {
                 ...existingData,
-                btcRelayId
+                btcRelayId: btcRelayId
             };
             
             // Write back the combined data
             fs.writeFileSync(
-                'btc_relay.json',
+                path.join(__dirname, '../../package_id.json'),
                 JSON.stringify(updatedData, null, 2)
             );
             console.log('Relay object ID:', btcRelayId);

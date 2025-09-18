@@ -11,13 +11,13 @@ module teleswap::burn_router_logic {
     use teleswap::burn_router_locker_connector::{Self};
     use bridged_btc::btc::BTC;
     use sui::sui::SUI;
-    use usdc::usdc::USDC;
+    use bridged_usdc::usdc::USDC;
     use bridged_usdt::usdt::USDT;
     use sui::clock::Clock;
     use sui::balance::{Self, Balance};
     use sui::event;
-    use cetus_clmm::pool;
-    use cetus_clmm::config::GlobalConfig;
+    use cetusclmm::pool;
+    use cetusclmm::config::GlobalConfig;
     use teleswap::dexconnector::{Self};
     
     // ===== CONSTANTS =====

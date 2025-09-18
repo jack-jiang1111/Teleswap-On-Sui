@@ -23,7 +23,4 @@ exchange_store 600-610
 exchange_logic 611-630
 
 
-deploy scripts:
-1. btcrelay contract
-2. usdc,usdt,wbtc contract
 

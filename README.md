@@ -22,7 +22,7 @@ TeleswapSui is a bridge protocol that:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/teleswapSui.git
+git clone https://github.com/jack-jiang1111/teleswapSui.git
 cd teleswapSui
 ```
 
@@ -97,7 +97,7 @@ npm test -- tests/burn.test.ts
 npm test -- tests/locker.test.ts
 ```
 
-8. Deploy the contract (under maintain):
+8. Deploy the contract:
 ```bash
 # Deploy the contract to mainnet/testnet/local 
 npx ts-node scripts/deploy/01-deploy_btc_relay.ts [network]
@@ -105,6 +105,12 @@ npx ts-node scripts/deploy/01-deploy_btc_relay.ts [network]
 # Modified the starting period/height in file 02-initialize_btc_relay.ts
 # Initialze the contract on mainnet/testnet/local 
 npx ts-node scripts/deploy/02-initialize_btc_relay.ts [network]
+
+# Deploy mock usdt/wbtc/usdc on testnet (skip on mainnet)
+npx ts-node scripts/deploy/03-deploy_mock_tokens.ts testnet
+
+# Deploy teleswap main package
+npx ts-node scripts/deploy/04-deploy_main_package.ts [network]
 ```
 
 ## License

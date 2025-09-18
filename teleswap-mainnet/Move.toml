@@ -7,14 +7,15 @@ edition = "2024"
 MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", rev = "e54b798790ed", subdir = "crates/sui-framework/packages/move-stdlib", override = true }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "e54b798790ed", override = true }
 CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "main" }
-BridgedUSDC = { local = "../mock/mock_coins/usdc" }
-BridgedUSDT = { local = "../mock/mock_coins/usdt" }
-BridgedBTC = { local = "../mock/mock_coins/btc" }
+usdc = { git = "https://github.com/circlefin/stablecoin-sui.git", subdir = "packages/usdc", rev = "master" }
+BridgedUSDT = { git = "https://github.com/MystenLabs/sui.git", subdir = "bridge/move/tokens/usdt", rev = "main" }
+BridgedBTC = { git = "https://github.com/MystenLabs/sui.git", subdir = "bridge/move/tokens/btc", rev = "main" }
 btcrelay = { local = "../btcrelay-package" }
+
 
 [addresses]
 teleswap = "0x0"
 sui = "0x2"
 btcrelay = "0x934683c693fbc5964b4a998f0ff93167aacb94e9926773526833b16e0945772d"
-cetus_clmm = "0xb2a1d27337788bda89d350703b8326952413bd94b35b9b573ac8401b9803d018"
+cetus_clmm = "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb"
 

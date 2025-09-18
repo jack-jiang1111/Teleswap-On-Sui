@@ -3,15 +3,15 @@ module teleswap::dexconnector {
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::event;
 
-    use cetus_clmm::pool;
-    use cetus_clmm::config::GlobalConfig;
+    use cetusclmm::pool;
+    use cetusclmm::config::GlobalConfig;
     use std::type_name;
     
     // Import coin types
     use teleswap::telebtc::{Self, TELEBTC, TeleBTCCap};
     use bridged_btc::btc::BTC;
     use sui::sui::SUI;
-    use usdc::usdc::USDC;
+    use bridged_usdc::usdc::USDC;
     use bridged_usdt::usdt::USDT;
     use sui::clock::Clock;
     use sui::balance::{Self, Balance};

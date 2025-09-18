@@ -12,13 +12,13 @@ module teleswap::cc_exchange_logic {
     use teleswap::lockercore::{Self};
     use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
     use teleswap::dexconnector::{Self};
-    use cetus_clmm::pool;
-    use cetus_clmm::config::GlobalConfig;
+    use cetusclmm::pool;
+    use cetusclmm::config::GlobalConfig;
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::clock::{Clock};
     use bridged_btc::btc::BTC;
     use sui::sui::SUI;
-    use usdc::usdc::USDC;
+    use bridged_usdc::usdc::USDC;
     use bridged_usdt::usdt::USDT;
     use std::type_name;
     use teleswap::burn_router_locker_connector;
