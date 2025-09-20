@@ -4,17 +4,12 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", rev = "e54b798790ed", subdir = "crates/sui-framework/packages/move-stdlib", override = true }
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "e54b798790ed", override = true }
-CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "main" }
+CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0", override = true }
 BridgedUSDC = { local = "../mock/mock_coins/usdc" }
 BridgedUSDT = { local = "../mock/mock_coins/usdt" }
 BridgedBTC = { local = "../mock/mock_coins/btc" }
 btcrelay = { local = "../btcrelay-package" }
 
+
 [addresses]
 teleswap = "0x0"
-sui = "0x2"
-btcrelay = "0xe7761e113edf177fbce9ae9f5d264c0ff27c1e21bb69130d43686045efe20ab7"
-cetus_clmm = "0xb2a1d27337788bda89d350703b8326952413bd94b35b9b573ac8401b9803d018"
-

@@ -12,8 +12,8 @@ module teleswap::cc_exchange_logic {
     use teleswap::lockercore::{Self};
     use teleswap::telebtc::{Self, TeleBTCCap, TELEBTC};
     use teleswap::dexconnector::{Self};
-    use cetusclmm::pool;
-    use cetusclmm::config::GlobalConfig;
+    use cetus_clmm::pool;
+    use cetus_clmm::config::GlobalConfig;
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::clock::{Clock};
     use bridged_btc::btc::BTC;

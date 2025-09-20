@@ -40,7 +40,7 @@ module teleswap::lockercore {
     /// @param _receiver Address to receive the minted tokens
     /// @param ctx Transaction context
     /// @return (Coin<TELEBTC>, address) - minted coins and locker address
-    public fun mint(
+    public(package) fun mint(
         _locker_locking_script: vector<u8>,
         _amount: u256,
         locker_cap: &mut LockerCap,

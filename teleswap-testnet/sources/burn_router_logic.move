@@ -16,8 +16,8 @@ module teleswap::burn_router_logic {
     use sui::clock::Clock;
     use sui::balance::{Self, Balance};
     use sui::event;
-    use cetusclmm::pool;
-    use cetusclmm::config::GlobalConfig;
+    use cetus_clmm::pool;
+    use cetus_clmm::config::GlobalConfig;
     use teleswap::dexconnector::{Self};
     
     // ===== CONSTANTS =====

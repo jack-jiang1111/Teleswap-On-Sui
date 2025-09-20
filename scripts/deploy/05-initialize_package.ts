@@ -5,6 +5,7 @@ import * as path from 'path';
 import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
 
+// locker cap not found, burnrouter found twice
 async function main() {
   const networkName = process.argv[2];
   const network = getNetwork(networkName);
@@ -50,6 +51,10 @@ async function main() {
   const TREASURY = activeAddress;
   const BITCOIN_FEE_ORACLE = activeAddress;
 
+  let ccTransferRouterId = "";
+  let burnRouterId = "";
+  let lockerCapId = "";
+  let exchangeCapId = "";
   // Initialize CC Transfer Router
   {
     const tx = new TransactionBlock();
@@ -68,7 +73,26 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
-    if (res.effects?.status?.status !== 'success') throw new Error('cc_transfer initialize failed');
+    if (res.effects?.status?.status !== 'success') {
+      console.log('cc_transfer initialize failed');
+      console.log(res.effects);
+    }
+    else{ // if success find the ccTransferRouterId
+      console.log('cc_transfer initialize success');
+      // find the ccTransferRouterId
+      
+      for (const obj of res.effects?.created || []) {
+        const objectId = obj.reference.objectId;
+        const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
+        const type = objInfo.data?.type || '';
+        if (type.includes('CCTransferRouterCap')) {
+          ccTransferRouterId = objectId;
+          console.log('ccTransferRouterId:', ccTransferRouterId);
+          break;
+        }
+      }
+    }
+    
   }
 
   // Initialize Burn Router
@@ -91,7 +115,24 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
-    if (res.effects?.status?.status !== 'success') throw new Error('burn_router initialize failed');
+    if (res.effects?.status?.status !== 'success') {
+      console.log('burn_router initialize failed');
+      console.log(res.effects);
+    }
+    else{
+      console.log('burn_router initialize success');
+      // find the burnRouterId
+      for (const obj of res.effects?.created || []) {
+        const objectId = obj.reference.objectId;
+        const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
+        const type = objInfo.data?.type || '';
+        if (type.includes('BurnRouter')) {
+          burnRouterId = objectId;
+          console.log('burnRouterId:', burnRouterId);
+          break;
+        }
+      }
+    }
   }
 
   // Initialize Locker
@@ -113,7 +154,24 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
-    if (res.effects?.status?.status !== 'success') throw new Error('locker initialize failed');
+    if (res.effects?.status?.status !== 'success') {
+      console.log('locker initialize failed');
+      console.log(res.effects);
+    }
+    else{
+      console.log('locker initialize success');
+      // find the lockerId
+      for (const obj of res.effects?.created || []) {
+          const objectId = obj.reference.objectId;
+          const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
+          const type = objInfo.data?.type || '';
+          if (type.includes('LockerCap')) {
+            lockerCapId = objectId;
+            console.log('lockerCapId:', lockerCapId);
+            break;
+          }
+        }
+      }
   }
 
   // Initialize Exchange (cc_exchange_storage)
@@ -127,7 +185,7 @@ async function main() {
     const THIRD_PARTY_ID = 1;
     const THIRD_PARTY_FEE = 0; // bps
     const THIRD_PARTY_ADDRESS = activeAddress;
-    const REWARD_DISTRIBUTOR = '0x0'; // disabled
+    const REWARD_DISTRIBUTOR = activeAddress; // disabled
     const SPECIAL_TELEPORTER = activeAddress;
     tx.moveCall({
       target: `${packageId}::cc_exchange_storage::initialize`,
@@ -148,7 +206,24 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
-    if (res.effects?.status?.status !== 'success') throw new Error('exchange initialize failed');
+    if (res.effects?.status?.status !== 'success') {
+      console.log('exchange initialize failed');
+      console.log(res.effects);
+    }
+    else{
+      console.log('exchange initialize success');
+      // find the exchangeId
+      for (const obj of res.effects?.created || []) {
+        const objectId = obj.reference.objectId;
+        const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
+        const type = objInfo.data?.type || '';
+        if (type.includes('ExchangeCap')) {
+          exchangeCapId = objectId;
+          console.log('exchangeCapId:', exchangeCapId);
+            break;
+          }
+      }
+    }
   }
 
   console.log('Initialization completed.');

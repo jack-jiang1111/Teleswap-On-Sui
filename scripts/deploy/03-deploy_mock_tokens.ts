@@ -9,10 +9,6 @@ import { getActiveKeypair } from '../helper/sui.utils';
 async function main() {
   const networkName = process.argv[2];
   const network = getNetwork(networkName);
-  if (network.name !== 'testnet' && network.name !== 'devnet') {
-    console.log('Mock token deployment is only for testnet. Skipping.');
-    process.exit(0);
-  }
   const client = new SuiClient({ url: network.url });
   const keypair = await getActiveKeypair();
   const activeAddress = keypair.toSuiAddress();
@@ -34,6 +30,20 @@ async function main() {
   for (let i = 0; i < tokenDirs.length; i++) {
     const dir = tokenDirs[i];
     const key = resultKeys[i];
+    
+    // Reset Move.toml address to 0x0 before building
+    const moveTomlPath = path.join(dir, 'Move.toml');
+    let moveTomlContent = fs.readFileSync(moveTomlPath, 'utf8');
+    
+    // Reset the address to 0x0
+    const addressName = key.replace('mock', '').replace('PackageId', '').toLowerCase();
+    const bridgedName = `bridged_${addressName}`;
+    const regex = new RegExp(`^${bridgedName}\\s*=.*$`, 'm');
+    moveTomlContent = moveTomlContent.replace(regex, `${bridgedName} = "0x0"`);
+    
+    fs.writeFileSync(moveTomlPath, moveTomlContent);
+    console.log(`Reset ${bridgedName} to 0x0 in Move.toml`);
+    
     console.log(`\nBuilding token package at ${dir} ...`);
     execSync('sui move build', { cwd: dir, stdio: 'inherit' });
 
@@ -64,6 +74,7 @@ async function main() {
     });
 
     let packageId = '';
+    let treasuryCapId = '';
     for (const obj of result.effects?.created || []) {
       const objectId = obj.reference.objectId;
         const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
@@ -72,14 +83,30 @@ async function main() {
         if(type === "package") {
             // This is the package ID
             packageId = objectId;
+        } else if (type.includes('TreasuryCap')) {
+            // This is the treasury cap
+            treasuryCapId = objectId;
         }
     }
     if (!packageId) {
       throw new Error(`Failed to determine packageId for ${dir}`);
     }
     console.log(`${key}: ${packageId}`);
+    if (treasuryCapId) {
+      console.log(`${key.replace('PackageId', 'TreasuryCapId')}: ${treasuryCapId}`);
+    }
     current[key] = packageId; // append/overwrite
+    if (treasuryCapId) {
+      current[key.replace('PackageId', 'TreasuryCapId')] = treasuryCapId;
+    }
     fs.writeFileSync(outPath, JSON.stringify(current, null, 2));
+
+    // Update Move.toml with the actual package ID
+    let updatedMoveTomlContent = fs.readFileSync(moveTomlPath, 'utf8');
+    const updatedRegex = new RegExp(`^${bridgedName}\\s*=.*$`, 'm');
+    updatedMoveTomlContent = updatedMoveTomlContent.replace(updatedRegex, `${bridgedName} = "${packageId}"`);
+    fs.writeFileSync(moveTomlPath, updatedMoveTomlContent);
+    console.log(`Updated ${bridgedName} to ${packageId} in Move.toml`);
 
     // wait 1s between deployments
     await new Promise(resolve => setTimeout(resolve, 1000));

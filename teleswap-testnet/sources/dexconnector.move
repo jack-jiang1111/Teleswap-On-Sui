@@ -3,8 +3,8 @@ module teleswap::dexconnector {
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::event;
 
-    use cetusclmm::pool;
-    use cetusclmm::config::GlobalConfig;
+    use cetus_clmm::pool;
+    use cetus_clmm::config::GlobalConfig;
     use std::type_name;
     
     // Import coin types
