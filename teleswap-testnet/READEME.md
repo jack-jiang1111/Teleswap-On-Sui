@@ -12,8 +12,8 @@ burn_storage 225-230
 burn_router_locker_connector 231-240
 transfer_storage 310-320
 transfer_logic 320-335
-telebtc 400-410
-request_parser 411-420
+telebtc 400-408
+request_parser 410-420
 dex_connector 421-431
 locker_storage 500-510
 locker_manager 510-520

@@ -52,6 +52,7 @@ export function hexToBytes(hex: string | number[]): number[] {
     for (let i = 0; i < sanitizedHex.length; i += 2) {
         bytes.push(parseInt(sanitizedHex.substr(i, 2), 16));
     }
+    //console.log('bytes:', bytes);
     return bytes;
 }
 

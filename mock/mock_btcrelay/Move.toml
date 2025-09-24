@@ -2,10 +2,10 @@
 name = "btcrelay"
 version = "0.0.1"
 edition = "2024"
-published-at = "0xd8e81354d5b8ab82cb3d6d9b0cab7c790b96d3493736596c6548fd8cec8a9379"
+published-at = "0x3317c95e0a675acf1c943fb636ea203823bbd267f14ed8c90c01ae8ae47e8d50"
 [dependencies]
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 
 [addresses]
-btcrelay = "0xd8e81354d5b8ab82cb3d6d9b0cab7c790b96d3493736596c6548fd8cec8a9379"
+btcrelay = "0x3317c95e0a675acf1c943fb636ea203823bbd267f14ed8c90c01ae8ae47e8d50"
 sui = "0x2" 

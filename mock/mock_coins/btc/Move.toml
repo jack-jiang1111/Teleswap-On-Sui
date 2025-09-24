@@ -1,13 +1,13 @@
 [package]
 name = "BridgedBTC"
 version = "0.0.1"
-published-at = "0xcdedb31f58d65fc80721f1d367b16fdf7cba021b2e42c1d9e43d206f308d9f20"
+published-at = "0xa0bc97fac9bc28c1f5398a5a23f82505e5de9c2bbe36d2837f904834f7ec934b"
 
 [dependencies]
 MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", rev = "e54b798790ed", subdir = "crates/sui-framework/packages/move-stdlib", override = true }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "e54b798790ed", override = true }
 
 [addresses]
-bridged_btc = "0x947ab78f46871c5ee857174b2fa413b4b9add4d5c6c8654472f338877ecee031"
+bridged_btc = "0xa0bc97fac9bc28c1f5398a5a23f82505e5de9c2bbe36d2837f904834f7ec934b"
 
 

@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
+import { PackageManager } from '../helper/package_manager';
 
 // locker cap not found, burnrouter found twice
 async function main() {
@@ -13,24 +14,24 @@ async function main() {
   const keypair = await getActiveKeypair();
   const activeAddress = keypair.toSuiAddress();
 
-  // Load IDs from package_id.json in main directory
-  const idsPath = path.join(__dirname, '../../package_id.json');
-  if (!fs.existsSync(idsPath)) throw new Error('package_id.json not found. Run previous deploy scripts first.');
-  const ids = JSON.parse(fs.readFileSync(idsPath, 'utf8'));
+  // Load IDs using PackageManager
+  const packageManager = new PackageManager();
+  const mainPackage = packageManager.getMainPackage(network.name as 'testnet' | 'mainnet');
+  const adminCaps = packageManager.getAdminCaps();
+  const telebtc = packageManager.getTelebtc();
+  const btcrelay = packageManager.getBtcrelay();
 
-  const packageId = network.name === 'testnet' ? ids.mainTestnetPackageId : ids.mainMainnetPackageId;
+  const packageId = mainPackage.packageId;
   if (!packageId) throw new Error('main packageId not found in package_id.json');
 
   // Admin and caps
-  const burnRouterAdminId = ids.burnRouterAdminId;
-  const ccTransferAdminId = ids.ccTransferAdminId;
-  const lockerAdminCapId = ids.lockerAdminCapId;
-  const telebtcAdminId = ids.telebtcAdminId;
-  const telebtcCapId = ids.telebtcCapId;
-  const telebtcTreasuryCapId = ids.telebtcTreasuryCapId;
-  const btcrelayCapId = ids.btcrelayCapId; // preferred
-  const btcrelayPackageId = ids.btcrelayPackageId; // fallback only if needed as ID placeholder
-  const btcrelayIdForInputs = btcrelayCapId ?? btcrelayPackageId;
+  const burnRouterAdminId = adminCaps.burnRouterAdminId;
+  const ccTransferAdminId = adminCaps.ccTransferAdminId;
+  const lockerAdminCapId = adminCaps.lockerAdminCapId;
+  const telebtcAdminId = telebtc.adminId;
+  const telebtcCapId = telebtc.capId;
+  const telebtcTreasuryCapId = telebtc.treasuryCapId;
+  const btcrelayIdForInputs = btcrelay.relayId || btcrelay.packageId;
   if (!burnRouterAdminId || !ccTransferAdminId || !lockerAdminCapId || !telebtcAdminId || !telebtcCapId || !telebtcTreasuryCapId || !btcrelayIdForInputs) {
     throw new Error('Required admin/cap IDs missing in package_id.json');
   }
@@ -73,6 +74,7 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
+    await new Promise(resolve => setTimeout(resolve, 1500)); // wait for 1.5s to make sure the transaction is executed
     if (res.effects?.status?.status !== 'success') {
       console.log('cc_transfer initialize failed');
       console.log(res.effects);
@@ -115,6 +117,7 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
+    await new Promise(resolve => setTimeout(resolve, 1500)); // wait for 1.5s to make sure the transaction is executed
     if (res.effects?.status?.status !== 'success') {
       console.log('burn_router initialize failed');
       console.log(res.effects);
@@ -154,6 +157,7 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
+    await new Promise(resolve => setTimeout(resolve, 1500)); // wait for 1.5s to make sure the transaction is executed
     if (res.effects?.status?.status !== 'success') {
       console.log('locker initialize failed');
       console.log(res.effects);
@@ -176,7 +180,7 @@ async function main() {
 
   // Initialize Exchange (cc_exchange_storage)
   {
-    const exchangeAdminId = ids.exchangeAdminId;
+    const exchangeAdminId = adminCaps.exchangeAdminId;
     if (!exchangeAdminId) throw new Error('exchangeAdminId missing in package_id.json');
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
@@ -206,6 +210,7 @@ async function main() {
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
+    await new Promise(resolve => setTimeout(resolve, 1500)); // wait for 1.5s to make sure the transaction is executed
     if (res.effects?.status?.status !== 'success') {
       console.log('exchange initialize failed');
       console.log(res.effects);
@@ -226,7 +231,21 @@ async function main() {
     }
   }
 
+  // Save the initialized object IDs to package manager
+  packageManager.setInitializedObjects({
+    ccTransferRouterId: ccTransferRouterId,
+    burnRouterId: burnRouterId,
+    lockerCapId: lockerCapId,
+    exchangeCapId: exchangeCapId
+  });
+  packageManager.save();
+
   console.log('Initialization completed.');
+  console.log('Saved initialized object IDs:');
+  console.log('- ccTransferRouterId:', ccTransferRouterId);
+  console.log('- burnRouterId:', burnRouterId);
+  console.log('- lockerCapId:', lockerCapId);
+  console.log('- exchangeCapId:', exchangeCapId);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

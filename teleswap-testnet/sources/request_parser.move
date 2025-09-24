@@ -3,17 +3,17 @@ module teleswap::request_parser {
     use sui::address;
 
     /// Error codes
-    const EINVALID_LENGTH: u64 = 1;
+    const EINVALID_LENGTH: u64 = 410;
 
     // Constants for byte positions - Transfer Request (39 bytes)
-    const APP_ID_INDEX: u64 = 411;
-    const RECIPIENT_ADDRESS_START: u64 = 412;
-    const RECIPIENT_ADDRESS_END: u64 = 413;  // 1 + 32 - 1 (Sui addresses are 32 bytes)
-    const NETWORK_FEE_START: u64 = 414;
-    const NETWORK_FEE_END: u64 = 417;
-    const SPEED_INDEX: u64 = 418;
-    const THIRD_PARTY_INDEX: u64 = 419;
-    const TRANSFER_REQUEST_LENGTH: u64 = 420;
+    const APP_ID_INDEX: u64 = 0;
+    const RECIPIENT_ADDRESS_START: u64 = 1;
+    const RECIPIENT_ADDRESS_END: u64 = 32;  // 1 + 32 - 1 (Sui addresses are 32 bytes)
+    const NETWORK_FEE_START: u64 = 33;
+    const NETWORK_FEE_END: u64 = 36;
+    const SPEED_INDEX: u64 = 37;
+    const THIRD_PARTY_INDEX: u64 = 38;
+    const TRANSFER_REQUEST_LENGTH: u64 = 39;
 
     // Constants for byte positions - Exchange Request (58 bytes)
     // appId: 1 byte (0)

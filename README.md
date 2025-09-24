@@ -81,13 +81,13 @@ sui client faucet
 
 # Option 1: Run all tests sequentially using scripts
 # PowerShell (Windows):
-.\scripts\test\run-tests.ps1
+.\scripts\runtest\run-tests.ps1
 
 # Batch file (Windows):
-.\scripts\test\run-tests.bat
+.\scripts\runtest\run-tests.bat
 
 # Node.js (Cross-platform):
-node scripts/test/run-tests.js
+node scripts/runtest/run-tests.js
 
 # Option 2: Run tests individually
 npm test -- tests/btcrelay.test.ts
@@ -100,7 +100,7 @@ npm test -- tests/locker.test.ts
 8. Deploy the contract:
 before deploy the contract, need to fetch some test coin on faceut
 ```bash
-# Deploy the contract to mainnet/testnet/devnet
+# Deploy the contract to mainnet/testnet/devnet, use --real_relay flag if use real btcrelay (otherise use mock btcrelay)
 npx ts-node scripts/deploy/01-deploy_btc_relay.ts [network]
 
 # Modified the starting period/height in file 02-initialize_btc_relay.ts
@@ -115,6 +115,12 @@ npx ts-node scripts/deploy/04-deploy_main_package.ts [network]
 
 # Initialized the main package, modify the constant in 05-initialized_package.ts
 npx ts-node scripts/deploy/05-initialize_package.ts [network]
+
+# Mint mock token
+npx ts-node scripts/testnet/mint_mock_coins.ts
+
+# Set up locker and wrap some telebtc
+npx ts-node scripts/sdk/test.ts
 ```
 
 ## License
@@ -138,19 +144,12 @@ MIT
 ```
 1.sdk script to create cetus pool on testnet
 
-2.btcrelay mock on testnet
-
 3. useful script on testnet
   - unwrap,swap_and_unwrap,burn_proof function in burn_router_logic
   - wrap_and_swap,refund_by_admin in cc_exchange_logic
-  - wrap in cc_transfer_router_logic
   - addHeadersWithRetarget,addHeaders in btcrelay
 
 4. prepare step for testing
-  - request_to_become_locker by someone
-  - add_locker by deployer
-  - generate a fake tx (btcrelay is a mock)
-  - wrap, this will give us some telebtc
   - form pools, usdc-sui, usdc-usdt,usdc-btc,telebtc-btc (four pools)
 
 5. start testing
@@ -166,5 +165,7 @@ MIT
 8. gas improvement
 
 ```
-
+M 2.4
+B 0.37
+MOG 268M
 

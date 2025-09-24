@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
+import { PackageManager } from '../helper/package_manager';
 
 async function main() {
     // Get network from command line args or use default
@@ -17,9 +18,10 @@ async function main() {
     const keypair = await getActiveKeypair();
     const activeAddress = keypair.toSuiAddress();
 
-    // Read package ID from the JSON file in main directory
-    const packageData = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package_id.json'), 'utf8'));
-    const packageId = packageData.btcrelayPackageId;
+    // Read package ID using PackageManager
+    const packageManager = new PackageManager();
+    const btcrelay = packageManager.getBtcrelay();
+    const packageId = btcrelay.packageId;
     console.log('Using package ID:', packageId);
 
     // Parameters for initialization
@@ -66,7 +68,7 @@ async function main() {
             tx.pure(height),
             tx.pure(period_start_hex),
             tx.pure(finalization_parameter),
-            tx.object(packageData.btcrelayAdminId), // Pass the relayAdmin object
+            tx.object(btcrelay.adminId), // Pass the relayAdmin object
         ]
     });
 
@@ -76,7 +78,7 @@ async function main() {
         signer: keypair,
         options: { showEffects: true }
     });
-
+    await new Promise(resolve => setTimeout(resolve, 1500)); // wait for 1.5s to make sure the transaction is executed
     if (result.effects?.status.status === 'success') {
         console.log('BTC relay initialized successfully!');
         // Save the relay object ID if needed
@@ -93,20 +95,8 @@ async function main() {
         // Store the BTCRelay object ID for future tests
         let btcRelayId = newBtcRelay.reference.objectId;
         if (btcRelayId) {
-            // Read existing JSON file
-            const existingData = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package_id.json'), 'utf8'));
-            
-            // Append new data
-            const updatedData = {
-                ...existingData,
-                btcRelayId: btcRelayId
-            };
-            
-            // Write back the combined data
-            fs.writeFileSync(
-                path.join(__dirname, '../../package_id.json'),
-                JSON.stringify(updatedData, null, 2)
-            );
+            packageManager.setBtcrelay({ relayId: btcRelayId });
+            packageManager.save();
             console.log('Relay object ID:', btcRelayId);
         }
     } else {

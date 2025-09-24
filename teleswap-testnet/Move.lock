@@ -2,7 +2,7 @@
 
 [move]
 version = 3
-manifest_digest = "268B71DFB3F56B646652D1D6D0756C3ECD20F64E09C81E05C0D8912064057767"
+manifest_digest = "6E93764ABBC880C0B9A24E3AB511E92D96A5B7262E2E7177AF3C8A5B596ADCD1"
 deps_digest = "8227D341C0550A37580C10FA45FE148A465225149C69D179737E0FE454AD6AEC"
 dependencies = [
   { id = "Bridge", name = "Bridge" },
@@ -102,7 +102,7 @@ dependencies = [
 
 [[move.package]]
 id = "btcrelay"
-source = { local = "..\\btcrelay-package" }
+source = { local = "..\\mock\\mock_btcrelay" }
 
 dependencies = [
   { id = "Sui", name = "Sui" },
@@ -117,6 +117,6 @@ flavor = "sui"
 
 [env.testnet]
 chain-id = "4c78adac"
-original-published-id = "0xaf4049342212e54954470e7e6670aaa6f69f0cdb312344d4400a317f90b9811f"
-latest-published-id = "0xaf4049342212e54954470e7e6670aaa6f69f0cdb312344d4400a317f90b9811f"
+original-published-id = "0x9e4c16c322ca194174676aa56fe98e73ab7c8c85f3b015d7a3618916ced61d05"
+latest-published-id = "0x9e4c16c322ca194174676aa56fe98e73ab7c8c85f3b015d7a3618916ced61d05"
 published-version = "1"

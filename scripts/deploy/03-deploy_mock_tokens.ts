@@ -5,6 +5,25 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
+import { PackageManager } from '../helper/package_manager';
+
+function updatePublishedAtInToml(toml: string, pkgId: string): string {
+  // Replace a line like: published-at = "0x..." (or without quotes)
+  const re = /(published-at\s*=\s*)("?)(0x[0-9a-fA-F]+)("?)/;
+  if (re.test(toml)) {
+    return toml.replace(re, `$1"${pkgId}"`);
+  }
+  // If not present, try to append under [package]
+  if (toml.includes('[package]')) {
+    return toml.replace(/\[package\][^\n]*\n/, (m) => m + `published-at = "${pkgId}"
+`);
+  }
+  // Fallback: append at end
+  return toml + `
+[package]
+published-at = "${pkgId}"
+`;
+}
 
 async function main() {
   const networkName = process.argv[2];
@@ -21,11 +40,7 @@ async function main() {
   ];
   const resultKeys = ['mockBtcPackageId', 'mockUsdtPackageId', 'mockUsdcPackageId'] as const;
 
-  const outPath = path.join(__dirname, '../../package_id.json');
-  let current: any = {};
-  if (fs.existsSync(outPath)) {
-    try { current = JSON.parse(fs.readFileSync(outPath, 'utf8')); } catch {}
-  }
+  const packageManager = new PackageManager();
 
   for (let i = 0; i < tokenDirs.length; i++) {
     const dir = tokenDirs[i];
@@ -41,8 +56,11 @@ async function main() {
     const regex = new RegExp(`^${bridgedName}\\s*=.*$`, 'm');
     moveTomlContent = moveTomlContent.replace(regex, `${bridgedName} = "0x0"`);
     
+    // Reset published-at to 0x0
+    moveTomlContent = updatePublishedAtInToml(moveTomlContent, '0x0');
+    
     fs.writeFileSync(moveTomlPath, moveTomlContent);
-    console.log(`Reset ${bridgedName} to 0x0 in Move.toml`);
+    console.log(`Reset ${bridgedName} and published-at to 0x0 in Move.toml`);
     
     console.log(`\nBuilding token package at ${dir} ...`);
     execSync('sui move build', { cwd: dir, stdio: 'inherit' });
@@ -72,9 +90,10 @@ async function main() {
       signer: keypair,
       options: { showEffects: true }
     });
-
+    await new Promise(resolve => setTimeout(resolve, 1500)); // wait for 1.5s to make sure the transaction is executed
     let packageId = '';
     let treasuryCapId = '';
+    let metadataId = '';
     for (const obj of result.effects?.created || []) {
       const objectId = obj.reference.objectId;
         const objInfo = await client.getObject({ id: objectId, options: { showType: true } });
@@ -87,6 +106,9 @@ async function main() {
             // This is the treasury cap
             treasuryCapId = objectId;
         }
+        else if(type.includes('CoinMetadata')){
+            metadataId = objectId;
+        }
     }
     if (!packageId) {
       throw new Error(`Failed to determine packageId for ${dir}`);
@@ -95,18 +117,31 @@ async function main() {
     if (treasuryCapId) {
       console.log(`${key.replace('PackageId', 'TreasuryCapId')}: ${treasuryCapId}`);
     }
-    current[key] = packageId; // append/overwrite
-    if (treasuryCapId) {
-      current[key.replace('PackageId', 'TreasuryCapId')] = treasuryCapId;
+    if (metadataId) {
+      console.log(`${key.replace('PackageId', 'MetadataId')}: ${metadataId}`);
     }
-    fs.writeFileSync(outPath, JSON.stringify(current, null, 2));
+    
+    // Update package manager with new token data
+    const tokenType = key.replace('mock', '').replace('PackageId', '').toLowerCase() as 'btc' | 'usdt' | 'usdc';
+    packageManager.setMockToken(tokenType, {
+      packageId: packageId,
+      treasuryCapId: treasuryCapId,
+      metadataId: metadataId
+    });
+    packageManager.save();
 
     // Update Move.toml with the actual package ID
     let updatedMoveTomlContent = fs.readFileSync(moveTomlPath, 'utf8');
+    
+    // Update the bridged address
     const updatedRegex = new RegExp(`^${bridgedName}\\s*=.*$`, 'm');
     updatedMoveTomlContent = updatedMoveTomlContent.replace(updatedRegex, `${bridgedName} = "${packageId}"`);
+    
+    // Update the published-at field
+    updatedMoveTomlContent = updatePublishedAtInToml(updatedMoveTomlContent, packageId);
+    
     fs.writeFileSync(moveTomlPath, updatedMoveTomlContent);
-    console.log(`Updated ${bridgedName} to ${packageId} in Move.toml`);
+    console.log(`Updated ${bridgedName} and published-at to ${packageId} in Move.toml`);
 
     // wait 1s between deployments
     await new Promise(resolve => setTimeout(resolve, 1000));

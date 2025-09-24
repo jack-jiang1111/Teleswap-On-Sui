@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { hexToBytes } from '../tests/utils/utils';
+import { hexToBytes } from '../../tests/utils/utils';
 
 // Helper function to convert hex string to Uint8Array
 function fromHex(hex: string): Uint8Array {
@@ -105,6 +105,45 @@ function createBitcoinVout(bitcoinAmount: number, opReturn: string): string {
     vout += '0000000000000000' + opReturnScriptLength + opReturnScript; // 0 satoshis for OP_RETURN
     
     // 4. Third output: Change output (P2PKH format) - using exact rescue script from test
+    const changeAmount = Math.floor(satoshis * 0.1); // 10% change
+    const changeAmountHex = changeAmount.toString(16).padStart(16, '0');
+    const changeScript = '1976a914' + '12ab8dc588ca9d5787dde7eb29569da63c3a238c' + '88ac'; // P2PKH script, exact rescue script from test
+    const changeScriptLength = createCompactInt(changeScript.length / 2);
+    vout += changeAmountHex + changeScriptLength + changeScript;
+    
+    return vout;
+}
+
+// Helper function to create Bitcoin vout with P2PKH script type for main output
+function createBitcoinVoutP2PKH(bitcoinAmount: number, opReturn: string): string {
+    // Convert BTC to satoshis (1 BTC = 100,000,000 satoshis)
+    const satoshis = bitcoinAmount * 100000000;
+    
+    // Create the vout structure according to Bitcoin protocol
+    let vout = '';
+    
+    // 1. Number of outputs (VarInt)
+    vout += createCompactInt(3); // 3 outputs: main output, OP_RETURN, change
+    
+    // 2. First output: Main payment (P2PKH format)
+    // Convert to little-endian
+    const satoshisHex = satoshis.toString(16).padStart(16, '0');
+    const bytes = satoshisHex.match(/.{2}/g) || [];
+    const littleEndianHex = bytes.reverse().join('');
+    const mainAmountHex = littleEndianHex;
+    
+    // P2PKH script: OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+    // 1976a914<pubKeyHash>88ac
+    const mainScript = '1976a914' + '4062c8aeed4f81c2d73ff854a2957021191e20b6' + '88ac';
+    const mainScriptLength = createCompactInt(mainScript.length / 2); // 25 bytes
+    vout += mainAmountHex + mainScriptLength + mainScript;
+    
+    // 3. Second output: OP_RETURN with our data
+    const opReturnScript = '6a' + createCompactInt(opReturn.length / 2) + opReturn; // OP_RETURN + length + data
+    const opReturnScriptLength = createCompactInt(opReturnScript.length / 2);
+    vout += '0000000000000000' + opReturnScriptLength + opReturnScript; // 0 satoshis for OP_RETURN
+    
+    // 4. Third output: Change output (P2PKH format)
     const changeAmount = Math.floor(satoshis * 0.1); // 10% change
     const changeAmountHex = changeAmount.toString(16).padStart(16, '0');
     const changeScript = '1976a914' + '12ab8dc588ca9d5787dde7eb29569da63c3a238c' + '88ac'; // P2PKH script, exact rescue script from test
@@ -290,8 +329,8 @@ function createBitcoinTransactionJson(
     // Create Bitcoin transaction components according to protocol
     const version = "0x02000000";
     const vin = "0x" + createBitcoinVin();
-    const bitcoinAmount = noValue ? 0 : 0.0001;
-    const vout = "0x" + createBitcoinVout(bitcoinAmount, transferRequestHex);
+    const bitcoinAmount = noValue ? 0 : 1;
+    const vout = "0x" + createBitcoinVoutP2PKH(bitcoinAmount, transferRequestHex);
     const opReturn = transferRequestHex;
     const locktime = "0x00000000";
     

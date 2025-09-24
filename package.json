@@ -7,11 +7,12 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@cetusprotocol/cetus-sui-clmm-sdk": "^5.4.0",
     "@mysten/sui.js": "^0.54.1",
     "@teleportdao/bitcoin": "^2.2.7-beta.0"
   },
   "devDependencies": {
-    "@types/node": "^20.17.46",
+    "@types/node": "^20.19.17",
     "@vitest/coverage-v8": "^1.6.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",

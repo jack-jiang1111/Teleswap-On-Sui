@@ -8,7 +8,7 @@ CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git",
 BridgedUSDC = { local = "../mock/mock_coins/usdc" }
 BridgedUSDT = { local = "../mock/mock_coins/usdt" }
 BridgedBTC = { local = "../mock/mock_coins/btc" }
-btcrelay = { local = "../btcrelay-package" }
+btcrelay = { local = "../mock/mock_btcrelay" }
 
 
 [addresses]

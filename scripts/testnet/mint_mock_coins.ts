@@ -2,8 +2,9 @@ import { SuiClient, SuiHTTPTransport } from '@mysten/sui.js/client';
 import { TransactionBlock } from '@mysten/sui.js/transactions';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getNetwork } from './config';
-import { getActiveKeypair } from './sui.utils';
+import { getNetwork } from '../helper/config';
+import { getActiveKeypair } from '../helper/sui.utils';
+import { PackageManager } from '../helper/package_manager';
 
 async function main() {
     const networkName = process.argv[2] || 'testnet';
@@ -16,7 +17,7 @@ async function main() {
     const client = new SuiClient({ transport });
     const keypair = await getActiveKeypair();
     const activeAddress = keypair.toSuiAddress();
-    const receiveAddress = "0xe5a7c377bb13572959b1dc7589e0abd951a89ca7ba9f2ed9167ba4e290ea8ad5";
+    const receiveAddress = activeAddress;
 
   
 
@@ -29,21 +30,24 @@ async function main() {
 
   
 
-  // Load package IDs and treasury cap IDs from package_id.json
-  const packageIds = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package_id.json'), 'utf8'));
-  const mockBtcPackageId = packageIds.mockBtcPackageId;
-  const mockUsdtPackageId = packageIds.mockUsdtPackageId;
-  const mockUsdcPackageId = packageIds.mockUsdcPackageId;
-  const mockBtcTreasuryCapId = packageIds.mockBtcTreasuryCapId;
-  const mockUsdtTreasuryCapId = packageIds.mockUsdtTreasuryCapId;
-  const mockUsdcTreasuryCapId = packageIds.mockUsdcTreasuryCapId;
+  // Load package IDs and treasury cap IDs using PackageManager
+  const packageManager = new PackageManager();
+  const mockTokens = packageManager.getMockTokens();
+  
+  const mockBtcPackageId = mockTokens.btc.packageId;
+  const mockUsdtPackageId = mockTokens.usdt.packageId;
+  const mockUsdcPackageId = mockTokens.usdc.packageId;
+  const mockBtcTreasuryCapId = mockTokens.btc.treasuryCapId;
+  const mockUsdtTreasuryCapId = mockTokens.usdt.treasuryCapId;
+  const mockUsdcTreasuryCapId = mockTokens.usdc.treasuryCapId;
+  // Note: metadata IDs are also available as mockTokens.btc.metadataId, etc.
 
-  if (!mockBtcPackageId) throw new Error('mockBtcPackageId not found in package_id.json');
-  if (!mockUsdtPackageId) throw new Error('mockUsdtPackageId not found in package_id.json');
-  if (!mockUsdcPackageId) throw new Error('mockUsdcPackageId not found in package_id.json');
-  if (!mockBtcTreasuryCapId) throw new Error('mockBtcTreasuryCapId not found in package_id.json. Please run the mock token deployment script first.');
-  if (!mockUsdtTreasuryCapId) throw new Error('mockUsdtTreasuryCapId not found in package_id.json. Please run the mock token deployment script first.');
-  if (!mockUsdcTreasuryCapId) throw new Error('mockUsdcTreasuryCapId not found in package_id.json. Please run the mock token deployment script first.');
+  if (!mockBtcPackageId) throw new Error('mockBtcPackageId not found. Please run the mock token deployment script first.');
+  if (!mockUsdtPackageId) throw new Error('mockUsdtPackageId not found. Please run the mock token deployment script first.');
+  if (!mockUsdcPackageId) throw new Error('mockUsdcPackageId not found. Please run the mock token deployment script first.');
+  if (!mockBtcTreasuryCapId) throw new Error('mockBtcTreasuryCapId not found. Please run the mock token deployment script first.');
+  if (!mockUsdtTreasuryCapId) throw new Error('mockUsdtTreasuryCapId not found. Please run the mock token deployment script first.');
+  if (!mockUsdcTreasuryCapId) throw new Error('mockUsdcTreasuryCapId not found. Please run the mock token deployment script first.');
 
   console.log('Minting mock coins...');
   console.log('Active Address:', activeAddress);
@@ -53,9 +57,9 @@ async function main() {
   console.log('USDC Package ID:', mockUsdcPackageId);
 
   // Default amounts (in smallest units)
-  const btcAmount = 1 * 10**8; // 1 BTC (8 decimals)
+  const btcAmount = 2 * 10**8; // 1 BTC (8 decimals)
   const usdtAmount = 10000 * 10**6; // 10000 USDT (6 decimals)
-  const usdcAmount = 10000 * 10**6; // 10000 USDC (6 decimals)
+  const usdcAmount = 30000 * 10**6; // 30000 USDC (6 decimals)
 
   const tx = new TransactionBlock();
   tx.setGasBudget(100000000);

@@ -5,6 +5,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
+import { PackageManager } from '../helper/package_manager';
 
 async function main() {
 
@@ -28,6 +29,8 @@ async function main() {
     console.log('Move.lock file not found or already deleted');
   }
 
+  // need to update the Move.toml file if using a btcrelay mock
+  
   // then run the publish command and capture output
   console.log(`Publishing package in ${pkgDir}...`);
   let publishOutput = '';
@@ -79,7 +82,7 @@ async function main() {
       showBalanceChanges: true
     }
   });
-
+  await new Promise(resolve => setTimeout(resolve, 1500)); // wait for 1.5s to make sure the transaction is executed
   let mainPackageId = '';
   let burnRouterAdminId = '';
   let exchangeAdminId = '';
@@ -88,7 +91,7 @@ async function main() {
   let telebtcAdminId = '';
   let telebtcCapId = '';
   let telebtcTreasuryCapId = '';
-
+  let telebtcMetadataId = '';
   if(result.effects?.status?.status !== 'success') {
     console.log('Transaction failed:', result.effects);
     throw new Error('Transaction failed');
@@ -109,6 +112,7 @@ async function main() {
       else if (type.includes('TELEBTC_ADMIN')) telebtcAdminId = objectId;
       else if (type.includes('TeleBTCCap')) telebtcCapId = objectId;
       else if (type.includes('TreasuryCap') && type.includes('telebtc::TELEBTC')) telebtcTreasuryCapId = objectId;
+      else if (type.includes('CoinMetadata')) telebtcMetadataId = objectId;
       else if (type === 'package') mainPackageId = objectId;
     } catch (error) {
       console.log(`Error getting object ${objectId}:`, error);
@@ -125,28 +129,31 @@ async function main() {
   if (telebtcAdminId) console.log('telebtcAdminId:', telebtcAdminId); else throw new Error('Missing TELEBTC_ADMIN');
   if (telebtcCapId) console.log('telebtcCapId:', telebtcCapId); else throw new Error('Missing TeleBTCCap');
   if (telebtcTreasuryCapId) console.log('telebtcTreasuryCapId:', telebtcTreasuryCapId); else throw new Error('Missing TreasuryCap<TELEBTC>');
-
-  // Append/overwrite to package_id.json in main directory
-  const outPath = path.join(__dirname, '../../package_id.json');
-  let current: any = {};
-  if (fs.existsSync(outPath)) {
-    try { current = JSON.parse(fs.readFileSync(outPath, 'utf8')); } catch {}
-  }
-  if (process.argv[2] === 'testnet') {
-    current.mainTestnetPackageId = mainPackageId;
-  } else {
-    current.mainMainnetPackageId = mainPackageId;
-  }
-  // common keys captured regardless of network
-  current.burnRouterAdminId = burnRouterAdminId || current.burnRouterAdminId;
-  current.exchangeAdminId = exchangeAdminId || current.exchangeAdminId;
-  current.ccTransferAdminId = ccTransferAdminId || current.ccTransferAdminId;
-  current.lockerAdminCapId = lockerAdminCapId || current.lockerAdminCapId;
-  current.telebtcAdminId = telebtcAdminId || current.telebtcAdminId;
-  current.telebtcCapId = telebtcCapId || current.telebtcCapId;
-  current.telebtcTreasuryCapId = telebtcTreasuryCapId || current.telebtcTreasuryCapId;
-
-  fs.writeFileSync(outPath, JSON.stringify(current, null, 2));
+  if (telebtcMetadataId) console.log('telebtcMetadataId:', telebtcMetadataId); else throw new Error('Missing CoinMetadata<TELEBTC>');
+  // Update package_id.json using PackageManager
+  const packageManager = new PackageManager();
+  
+  // Set main package ID based on network
+  const networkType = process.argv[2] === 'testnet' ? 'testnet' : 'mainnet';
+  packageManager.setMainPackage(networkType, mainPackageId);
+  
+  // Set admin caps
+  packageManager.setAdminCaps({
+    burnRouterAdminId: burnRouterAdminId,
+    exchangeAdminId: exchangeAdminId,
+    ccTransferAdminId: ccTransferAdminId,
+    lockerAdminCapId: lockerAdminCapId
+  });
+  
+  // Set telebtc data
+  packageManager.setTelebtc({
+    adminId: telebtcAdminId,
+    capId: telebtcCapId,
+    treasuryCapId: telebtcTreasuryCapId,
+    metadataId: telebtcMetadataId
+  });
+  
+  packageManager.save();
 
   console.log('package published and IDs recorded.');
 }
