@@ -207,10 +207,10 @@ module teleswap::burn_router_logic {
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
         pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
-        wbtc_coin: Coin<BTC>,
-        sui_coin: Coin<SUI>,
-        usdt_coin: Coin<USDT>,
-        usdc_coin: Coin<USDC>,
+        wbtc_coins: vector<Coin<BTC>>,
+        sui_coins: vector<Coin<SUI>>,
+        usdt_coins: vector<Coin<USDT>>,
+        usdc_coins: vector<Coin<USDC>>,
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         btcrelay: &BTCRelay,
@@ -227,14 +227,13 @@ module teleswap::burn_router_logic {
             pool_telebtc_wbtc,
             amounts[0], // input amount
             amounts[1], // min output amount
-            wbtc_coin,
-            sui_coin,
-            usdt_coin,
-            usdc_coin,
+            wbtc_coins,
+            sui_coins,
+            usdt_coins,
+            usdc_coins,
             clock,
             ctx
         );
-        
         // Call unwrap to burn the teleBTC and return the BTC amount
         unwrap(
             burn_router, 
@@ -553,16 +552,16 @@ module teleswap::burn_router_logic {
         pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
         input_amount: u64,
         min_output_amount: u64,
-        wbtc_coin: Coin<BTC>,
-        sui_coin: Coin<SUI>,
-        usdt_coin: Coin<USDT>,
-        usdc_coin: Coin<USDC>,
+        wbtc_coin: vector<Coin<BTC>>,
+        sui_coin: vector<Coin<SUI>>,
+        usdt_coin: vector<Coin<USDT>>,
+        usdc_coin: vector<Coin<USDC>>,
         clock: &Clock,
         ctx: &mut TxContext
     ): Coin<TELEBTC>
     {
-        // Create a zero-amount teleBTC coin for the swap
-        let telebtc_coin = coin::zero<TELEBTC>(ctx);
+        // Create a empty vector of teleBTC coin for the swap
+        let telebtc_coins = vector::empty<Coin<TELEBTC>>();
         
         let (status,telebtc_coin,wbtc_coin,sui_coin,usdt_coin,usdc_coin) = dexconnector::mainSwapTokens<TELEBTC>(
             config,
@@ -572,7 +571,7 @@ module teleswap::burn_router_logic {
             pool_telebtc_wbtc,
             input_amount,
             min_output_amount,
-            telebtc_coin,
+            telebtc_coins,
             wbtc_coin,
             sui_coin,
             usdt_coin,

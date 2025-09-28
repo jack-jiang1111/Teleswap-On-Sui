@@ -119,6 +119,9 @@ npx ts-node scripts/deploy/05-initialize_package.ts [network]
 # Mint mock token
 npx ts-node scripts/testnet/mint_mock_coins.ts
 
+# create cetus pools
+npx ts-node scripts/testnet/create_cetus_pools.ts
+
 # Set up locker and wrap some telebtc
 npx ts-node scripts/sdk/test.ts
 ```
@@ -150,6 +153,9 @@ MIT
   - addHeadersWithRetarget,addHeaders in btcrelay
 
 4. prepare step for testing
+  - auto script to generate pool
+  - auto script to mint lots of telebtc
+  - auto script to clear NFT
   - form pools, usdc-sui, usdc-usdt,usdc-btc,telebtc-btc (four pools)
 
 5. start testing
@@ -164,6 +170,17 @@ MIT
   - Reward distribute system in ccexchange and cc transfer(made it in locker, send fee to lockers)
 8. gas improvement
 
+WBTC MAINNET: 0xaafb102dd0902f5055cadecd687fb5b71ca82ef0e0285d90afde828ec58ca96b::btc::BTC
+(A,B) order matter since the cetus decide the (a>b)
+
+we add another version in dexconnector, testing it first
+GLOBAL CONFIG IN TESTNET: 0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e
+
+upgrade the package via cli: sui client upgrade --gas-budget 750000000 --upgrade-capability 0x9eecde074a89298a29c587088d885a8dd38a01c88e6cf0391209a61a43d2efc0
+the current issue: swap return error code 11, line 275 in dexconnector has some issue
+run the swap test: ts-node .\scripts\testnet\test_swap_clean.ts
+notice the telebtc package is hardcoded (the very orginal package, need to update the code later)
+in test.ts-sdk-script
 ```
 M 2.4
 B 0.37

@@ -167,7 +167,7 @@ function runAllTests() {
     let res = createBitcoinTransactionJson(
         "test",
         1,
-        "0xaf5d13af48dd554f22b3e4b97b2e1770b56dba9c9551826be8524b78f99e4a14",
+        "0xe4e1bf5689c6bb8ad58cab8e4852ca197a146f933a267b9aba5f908322f69595",
         1000,
         0,
         0,

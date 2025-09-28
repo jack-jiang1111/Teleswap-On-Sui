@@ -329,7 +329,7 @@ function createBitcoinTransactionJson(
     // Create Bitcoin transaction components according to protocol
     const version = "0x02000000";
     const vin = "0x" + createBitcoinVin();
-    const bitcoinAmount = noValue ? 0 : 1;
+    const bitcoinAmount = noValue ? 0 : 10;
     const vout = "0x" + createBitcoinVoutP2PKH(bitcoinAmount, transferRequestHex);
     const opReturn = transferRequestHex;
     const locktime = "0x00000000";

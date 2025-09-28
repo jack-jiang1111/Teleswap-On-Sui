@@ -2,6 +2,7 @@
 name = "teleswap"
 version = "0.0.1"
 edition = "2024"
+published-at = "0x2c029504ceda19d26dc6426e8b18b518843ce8406f6cd1416bbbf397b7f991a2"
 
 [dependencies]
 CetusClmm = { git = "https://github.com/CetusProtocol/cetus-clmm-interface.git", subdir = "sui/cetus_clmm", rev = "testnet-v1.26.0", override = true }

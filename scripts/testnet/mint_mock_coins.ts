@@ -57,9 +57,9 @@ async function main() {
   console.log('USDC Package ID:', mockUsdcPackageId);
 
   // Default amounts (in smallest units)
-  const btcAmount = 2 * 10**8; // 1 BTC (8 decimals)
-  const usdtAmount = 10000 * 10**6; // 10000 USDT (6 decimals)
-  const usdcAmount = 30000 * 10**6; // 30000 USDC (6 decimals)
+  const btcAmount = 10 * 10**8; // 10 BTC (8 decimals)
+  const usdtAmount = 100000 * 10**6; // 100000 USDT (6 decimals)
+  const usdcAmount = 100000 * 10**6; // 100000 USDC (6 decimals)
 
   const tx = new TransactionBlock();
   tx.setGasBudget(100000000);

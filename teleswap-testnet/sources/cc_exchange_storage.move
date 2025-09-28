@@ -48,7 +48,6 @@ module teleswap::cc_exchange_storage {
     /// - starting_block_number: Minimum accepted BTC block for requests
     /// - protocol_percentage_fee: Protocol fee in basis points (1e4)
     /// - locker_percentage_fee: Locker fee in basis points (1e4)
-    /// - chain_id: Destination chain id for bridge mappings (reserved)
     /// - lockers: Lockers manager address (reserved)
     /// - btcrelay_object_id: Authorized BTC relay object id
     /// - treasury: Treasury address to receive protocol fees
@@ -61,7 +60,6 @@ module teleswap::cc_exchange_storage {
         starting_block_number: u64,
         protocol_percentage_fee: u64,
         locker_percentage_fee: u64,
-        chain_id: u64,
         lockers: address,
         btcrelay_object_id: ID,
         treasury: address,

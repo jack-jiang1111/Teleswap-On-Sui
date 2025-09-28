@@ -454,11 +454,15 @@ module teleswap::cc_exchange_logic {
         // get info from telebtc coin
         let telebtc_amount = coin::value(&telebtc_coin);
         assert!(telebtc_amount >= input_amount, EINVALID_AMOUNT);
+        // create empty coin lists
+        let mut telebtc_coins = vector::empty<Coin<TELEBTC>>();
+        let mut wbtc_coins = vector::empty<Coin<BTC>>();
+        let mut sui_coins = vector::empty<Coin<SUI>>();
+        let mut usdt_coins = vector::empty<Coin<USDT>>();
+        let mut usdc_coins = vector::empty<Coin<USDC>>();
 
-        let mut wbtc_coin = coin::zero<BTC>(ctx);
-        let mut sui_coin = coin::zero<SUI>(ctx);
-        let mut usdt_coin = coin::zero<USDT>(ctx);
-        let mut usdc_coin = coin::zero<USDC>(ctx);
+        // put telebtc coin into the coin list
+        vector::push_back(&mut telebtc_coins, telebtc_coin);
 
         if(target_token == 0) {
             // WBTC
@@ -470,11 +474,11 @@ module teleswap::cc_exchange_logic {
                 pool_telebtc_wbtc,
                 input_amount,
                 output_amount,
-                telebtc_coin,
-                wbtc_coin,
-                sui_coin,
-                usdt_coin,
-                usdc_coin,
+                telebtc_coins,
+                wbtc_coins,
+                sui_coins,
+                usdt_coins,
+                usdc_coins,
                 clock,
                 ctx
             );
@@ -488,11 +492,11 @@ module teleswap::cc_exchange_logic {
                 pool_telebtc_wbtc,
                 input_amount,
                 output_amount,
-                telebtc_coin,
-                wbtc_coin,
-                sui_coin,
-                usdt_coin,
-                usdc_coin,
+                telebtc_coins,
+                wbtc_coins,
+                sui_coins,
+                usdt_coins,
+                usdc_coins,
                 clock,
                 ctx
             );
@@ -505,11 +509,11 @@ module teleswap::cc_exchange_logic {
                 pool_telebtc_wbtc,
                 input_amount,
                 output_amount,
-                telebtc_coin,
-                wbtc_coin,
-                sui_coin,
-                usdt_coin,
-                usdc_coin,
+                telebtc_coins,
+                wbtc_coins,
+                sui_coins,
+                usdt_coins,
+                usdc_coins,
                 clock,
                 ctx
             );
@@ -522,11 +526,11 @@ module teleswap::cc_exchange_logic {
                 pool_telebtc_wbtc,
                 input_amount,
                 output_amount,
-                telebtc_coin,
-                wbtc_coin,
-                sui_coin,
-                usdt_coin,
-                usdc_coin,
+                telebtc_coins,
+                wbtc_coins,
+                sui_coins,
+                usdt_coins,
+                usdc_coins,
                 clock,
                 ctx
             );
@@ -534,6 +538,10 @@ module teleswap::cc_exchange_logic {
         else{
             abort EINVALID_TARGET_TOKEN;
         };
+        let wbtc_coin = coin::zero<BTC>(ctx);
+        let sui_coin = coin::zero<SUI>(ctx);
+        let usdt_coin = coin::zero<USDT>(ctx);
+        let usdc_coin = coin::zero<USDC>(ctx);
         (false, telebtc_coin, wbtc_coin, sui_coin, usdt_coin, usdc_coin)
     }
 

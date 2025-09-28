@@ -51,6 +51,7 @@ export interface PackageIdStructure {
     lockerCapId: string;
     exchangeCapId: string;
   };
+  cetusPools?: Record<string, string>;
 }
 
 export class PackageManager {
@@ -129,7 +130,8 @@ export class PackageManager {
         burnRouterId: '',
         lockerCapId: '',
         exchangeCapId: ''
-      }
+      },
+      cetusPools: {}
     };
   }
 
@@ -144,6 +146,14 @@ export class PackageManager {
   public getAdminCaps() { return this.data.adminCaps; }
   public getTelebtc() { return this.data.telebtc; }
   public getInitializedObjects() { return this.data.initializedObjects; }
+  public getCetusPools() {
+    if (!this.data.cetusPools) this.data.cetusPools = {};
+    return this.data.cetusPools as Record<string, string>;
+  }
+  public getCetusPool(name: string) {
+    const pools = this.getCetusPools();
+    return pools[name];
+  }
 
   // Setters
   public setBtcrelay(btcrelay: Partial<PackageIdStructure['btcrelay']>) {
@@ -168,6 +178,11 @@ export class PackageManager {
 
   public setInitializedObjects(initializedObjects: Partial<PackageIdStructure['initializedObjects']>) {
     this.data.initializedObjects = { ...this.data.initializedObjects, ...initializedObjects };
+  }
+
+  public setCetusPool(name: string, poolId: string) {
+    if (!this.data.cetusPools) this.data.cetusPools = {};
+    this.data.cetusPools![name] = poolId;
   }
 
   // Legacy compatibility methods

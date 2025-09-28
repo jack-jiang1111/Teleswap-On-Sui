@@ -26,10 +26,21 @@ module teleswap::dexconnector {
     const EINSUFFICIENT_LIQUIDITY: u64 = 427;
     const EUNSUPPORTED_PATH: u64 = 428;
     const EPOOL_NOT_INITIALIZED: u64 = 429;
-    const EVALID_TARGET_TOKEN: u64 = 430;
-    const EINVALID_INPUT_AMOUNT: u64 = 431;
-
+    const EINVALID_INPUT_AMOUNT: u64 = 430;
+    const ENOT_ENOUGH_COINS: u64 = 431;
+    const EINVALID_TARGET_TOKEN: u64 = 432;
+    const EINVALID_INPUT_LIST_LENGTH: u64 = 433;
     // Events
+
+
+    // debug events
+    public struct DebugEvent has copy, drop {
+        value1: u64,
+        value2: u64,
+        value3: u64,
+        value4: u64,
+        value5: u64,
+    }
     /// Emitted when a swap completes successfully.
     /// - user: transaction sender
     /// - input_token/output_token: type names of tokens
@@ -63,6 +74,58 @@ module teleswap::dexconnector {
     /// This is used for generic type checking in Move
     fun is_same<T1, T2>(): bool {
         type_name::get<T1>() == type_name::get<T2>()
+    }
+
+    fun merge_and_split<T>(mut coins: vector<Coin<T>>, amount: u64, ctx: &mut TxContext): (Coin<T>, Coin<T>) {
+        let merged_coin = merge_coins(coins, ctx);
+        if(coin::value(&merged_coin) == 0) {
+            // not this coin type, just return zero coins
+            (merged_coin, coin::zero<T>(ctx))
+        }
+        else if(coin::value(&merged_coin) < amount) {
+            // not enough coins, abort with error code ENOT_ENOUGH_COINS
+            abort ENOT_ENOUGH_COINS
+        }
+        else{
+            // enough coins, split the coin
+            let (split_coin, remaining_coin) = split_coin(merged_coin, amount, ctx);
+            (split_coin, remaining_coin)
+        }
+    }
+
+    /// Helper function to merge all coins of a specific type into one
+    fun merge_coins<T>(mut coins: vector<Coin<T>>, ctx: &mut TxContext): Coin<T> {
+        if (std::vector::length(&coins) == 0) {
+            // Consume the empty vector
+            std::vector::destroy_empty(coins);
+            coin::zero<T>(ctx)
+        } else if (std::vector::length(&coins) == 1) {
+            let result = std::vector::pop_back(&mut coins);
+            // Consume the now-empty vector
+            std::vector::destroy_empty(coins);
+            result
+        } else {
+            let mut result = std::vector::pop_back(&mut coins);
+            while (std::vector::length(&coins) > 0) {
+                let next_coin = std::vector::pop_back(&mut coins);
+                coin::join(&mut result, next_coin);
+            };
+            // Consume the now-empty vector
+            std::vector::destroy_empty(coins);
+            result
+        }
+    }
+
+    /// Helper function to merge two coins
+    fun merge_two_coins<T>(mut coin_a: Coin<T>, coin_b: Coin<T>, ctx: &mut TxContext): Coin<T> {
+        coin::join(&mut coin_a, coin_b);
+        coin_a
+    }
+
+    /// Helper function to split a coin and return the split amount and remaining coin
+    fun split_coin<T>(mut coin: Coin<T>, amount: u64, ctx: &mut TxContext): (Coin<T>, Coin<T>) {
+        let split_coin = coin::split(&mut coin, amount, ctx);
+        (split_coin, coin)
     }
 
     /// Exact-in quote helper function
@@ -106,7 +169,7 @@ module teleswap::dexconnector {
     /// - min_output_amount: Minimum acceptable output amount
     /// 
     /// Returns: (bool, u64) - (success_flag, output_amount)
-    public(package) fun getQuoteSellTelebtc<TargetToken>(
+    public fun getQuoteSellTelebtc<TargetToken>(
         pool_usdc_sui: &pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
@@ -151,7 +214,7 @@ module teleswap::dexconnector {
     /// - min_output_amount: Minimum acceptable TELEBTC amount
     /// 
     /// Returns: (bool, u64) - (success_flag, output_amount)
-    public(package) fun getQuoteBuyTelebtc<InputToken>(
+    public fun getQuoteBuyTelebtc<InputToken>(
         pool_usdc_sui: &pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
@@ -206,7 +269,10 @@ module teleswap::dexconnector {
         ctx: &mut TxContext
     ):(Coin<CoinTypeA>, Coin<CoinTypeB>) {
         let amount = if (a2b) coin::value(&coin_a) else coin::value(&coin_b);
-        let sqrt_price_limit = if (a2b) 0xffffffffffffffffffffffffffffffffu128 else 1;
+        // Set appropriate sqrt_price_limit based on swap direction
+        // For a2b=true: limit should be less than current price (allow price to decrease)
+        // For a2b=false: limit should be greater than current price (allow price to increase)
+        let sqrt_price_limit = if (a2b) 1 else 0xffffffffffffffffffffffffffffffffu128;
         let (receive_a, receive_b, flash_receipt) = pool::flash_swap<CoinTypeA, CoinTypeB>(
             config,
             pool,
@@ -243,6 +309,456 @@ module teleswap::dexconnector {
         (coin_a, coin_b)
     }
 
+    /// Main swap function that handles all token swaps with coin lists
+    /// Supports both directions: tokens -> TELEBTC and TELEBTC -> tokens
+    /// Implements multi-hop swaps through WBTC and USDC as intermediate tokens
+    /// 
+    /// Parameters:
+    /// - config: Global configuration for Cetus CLMM
+    /// - pool_usdc_sui: Pool for USDC-SUI trading
+    /// - pool_usdc_usdt: Pool for USDC-USDT trading
+    /// - pool_usdc_wbtc: Pool for USDC-WBTC trading
+    /// - pool_telebtc_wbtc: Pool for TELEBTC-WBTC trading
+    /// - input_amount: Amount of input token provided
+    /// - min_output_amount: Minimum acceptable output amount
+    /// - telebtc_coins: List of TELEBTC coins (empty if not swapping TELEBTC)
+    /// - wbtc_coins: List of WBTC coins (empty if not swapping WBTC)
+    /// - sui_coins: List of SUI coins (empty if not swapping SUI)
+    /// - usdt_coins: List of USDT coins (empty if not swapping USDT)
+    /// - usdc_coins: List of USDC coins (empty if not swapping USDC)
+    /// - clock: Sui clock for transaction timing
+    /// - ctx: Transaction context
+    /// 
+    /// Returns: (bool, Coin<TELEBTC>, Coin<WBTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) - Success flag and updated coins
+    public fun mainSwapTokens<TargetToken>(
+        config: &GlobalConfig,
+        pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
+        pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
+        input_amount: u64, // amount of input token provided
+        min_output_amount: u64, // min amount of telebtc to get
+        mut telebtc_coins: vector<Coin<TELEBTC>>,
+        mut wbtc_coins: vector<Coin<BTC>>,
+        mut sui_coins: vector<Coin<SUI>>,
+        mut usdt_coins: vector<Coin<USDT>>,
+        mut usdc_coins: vector<Coin<USDC>>,
+        clock: &sui::clock::Clock,
+        ctx: &mut TxContext
+    ):(bool, Coin<TELEBTC>, Coin<BTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) {
+        let user = sui::tx_context::sender(ctx);
+        let timestamp = sui::clock::timestamp_ms(clock);
+        
+        
+        // Assure only one token is being swapped based on non-empty coin lists
+        let input_token_count = if (std::vector::length(&wbtc_coins) > 0) 1 else 0 + 
+                                if (std::vector::length(&sui_coins) > 0) 1 else 0 + 
+                                if (std::vector::length(&usdt_coins) > 0) 1 else 0 + 
+                                if (std::vector::length(&usdc_coins) > 0) 1 else 0 +
+                                if (std::vector::length(&telebtc_coins) > 0) 1 else 0;
+        assert!(input_token_count == 1, EINVALID_INPUT_LIST_LENGTH);
+
+        // merge all coins if there are multiple coins
+        // the first coin is the input coin, the second coin is the remaining coin
+        // if not the swap type, then both coins are zero
+        let (wbtc_coin,remaining_wbtc_coin) = merge_and_split<BTC>(wbtc_coins, input_amount, ctx);
+        let (sui_coin,remaining_sui_coin) = merge_and_split<SUI>(sui_coins, input_amount, ctx);
+        let (usdt_coin,remaining_usdt_coin) = merge_and_split<USDT>(usdt_coins, input_amount, ctx);
+        let (usdc_coin,remaining_usdc_coin) = merge_and_split<USDC>(usdc_coins, input_amount, ctx);
+        let (telebtc_coin,remaining_telebtc_coin) = merge_and_split<TELEBTC>(telebtc_coins, input_amount, ctx);
+        
+        if(is_same<TargetToken, TELEBTC>()) {
+            // Direction: Other tokens -> TELEBTC
+            assert!(coin::value(&telebtc_coin) == 0, EINVALID_AMOUNT);
+
+            // Determine which token is being swapped and merge coins
+            let input_token_type: std::type_name::TypeName;
+
+            // Get quote for the swap
+            let (status, quote_amount) = if (coin::value(&wbtc_coin) > 0) {
+                input_token_type = type_name::get<BTC>();
+                getQuoteBuyTelebtc<BTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+            } else if (coin::value(&sui_coin) > 0) {
+                input_token_type = type_name::get<SUI>();
+                getQuoteBuyTelebtc<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+            } else if (coin::value(&usdt_coin) > 0) {
+                input_token_type = type_name::get<USDT>();
+                getQuoteBuyTelebtc<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+            } else if (coin::value(&usdc_coin) > 0) {
+                input_token_type = type_name::get<USDC>();
+                getQuoteBuyTelebtc<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+            } else {
+                abort ENOT_ENOUGH_COINS;
+                (false, 0)
+            };
+
+            if (!status) {
+                // Slippage issue, return the original coins and emit failure event
+                event::emit(SwapFailed {
+                    user,
+                    input_token: input_token_type,
+                    output_token: type_name::get<TELEBTC>(),
+                    input_amount: input_amount,
+                    reason: b"0003slippage_too_high",
+                    timestamp,
+                });
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                // swap failed, return the original coins (merged coins)
+                return (false, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            };
+
+            // Execute the swap based on input token type
+            if(coin::value(&wbtc_coin) > 0) {
+                // Direct swap: WBTC -> TELEBTC
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, false, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<BTC>(),
+                    output_token: type_name::get<TELEBTC>(),
+                    input_amount: input_amount,
+                    output_amount: coin::value(&return_telebtc_coin),
+                    timestamp,
+                });
+                
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else if(coin::value(&usdc_coin) > 0) {
+                // Two-hop swap: USDC -> WBTC -> TELEBTC
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<USDC>(),
+                    output_token: type_name::get<TELEBTC>(),
+                    input_amount: input_amount,
+                    output_amount: coin::value(&return_telebtc_coin),
+                    timestamp,
+                });
+
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else if(coin::value(&sui_coin) > 0) {
+                // Three-hop swap: SUI -> USDC -> WBTC -> TELEBTC
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_coin, true, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<SUI>(),
+                    output_token: type_name::get<TELEBTC>(),
+                    input_amount: input_amount,
+                    output_amount: coin::value(&return_telebtc_coin),   
+                    timestamp,
+                });
+                
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(return_sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else if(coin::value(&usdt_coin) > 0) {
+                // Three-hop swap: USDT -> USDC -> WBTC -> TELEBTC
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_coin, true, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<USDT>(),
+                    output_token: type_name::get<TELEBTC>(),
+                    input_amount: input_amount,
+                    output_amount: coin::value(&return_telebtc_coin),
+                    timestamp,
+                });
+                
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(return_usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else{
+                abort EINVALID_TARGET_TOKEN
+            }
+        }
+        else{
+            // Direction: TELEBTC -> Other tokens
+            // Get quote for selling TELEBTC to get target token
+            let (status, amount) = getQuoteSellTelebtc<TargetToken>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount);
+            if (!status) {
+                // Slippage issue, return the original coins and emit failure event
+                event::emit(SwapFailed {
+                    user,
+                    input_token: type_name::get<TELEBTC>(),
+                    output_token: type_name::get<TargetToken>(),
+                    input_amount,
+                    reason: b"0002slippage_too_high",
+                    timestamp,
+                });
+
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                return (false, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            };
+            
+            // Validate coin amounts - only TELEBTC should have non-zero amount
+            let telebtc_amount = coin::value(&telebtc_coin);
+            let wbtc_amount = coin::value(&wbtc_coin);
+            let sui_amount = coin::value(&sui_coin);
+            let usdt_amount = coin::value(&usdt_coin);
+            let usdc_amount = coin::value(&usdc_coin);
+
+            event::emit(DebugEvent {
+                value1: telebtc_amount,
+                value2: wbtc_amount,
+                value3: sui_amount,
+                value4: usdt_amount,
+                value5: usdc_amount,
+            });
+            assert!(telebtc_amount > 0, EINVALID_AMOUNT);
+            assert!(wbtc_amount == 0, EINVALID_AMOUNT);
+            assert!(sui_amount == 0, EINVALID_AMOUNT);
+            assert!(usdt_amount == 0, EINVALID_AMOUNT);
+            assert!(usdc_amount == 0, EINVALID_AMOUNT);
+            assert!(telebtc_amount == input_amount, EINVALID_AMOUNT);
+
+            // Execute the swap based on target token type
+            if(is_same<TargetToken, BTC>()) {
+                // Direct swap: TELEBTC -> WBTC
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, true, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<TELEBTC>(),
+                    output_token: type_name::get<BTC>(),
+                    input_amount,
+                    output_amount: coin::value(&return_wbtc_coin),
+                    timestamp,
+                });
+                
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else if(is_same<TargetToken, USDC>()) {
+                // Two-hop swap: TELEBTC -> WBTC -> USDC
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, true, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<TELEBTC>(),
+                    output_token: type_name::get<USDC>(),
+                    input_amount,
+                    output_amount: coin::value(&return_usdc_coin),
+                    timestamp,
+                });
+                
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else if(is_same<TargetToken, SUI>()) {
+                // Three-hop swap: TELEBTC -> WBTC -> USDC -> SUI
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, true, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_coin, true, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<TELEBTC>(),
+                    output_token: type_name::get<SUI>(),
+                    input_amount,
+                    output_amount: coin::value(&return_sui_coin),
+                    timestamp,
+                });
+                
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(return_sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else if(is_same<TargetToken, USDT>()) {
+                // Three-hop swap: TELEBTC -> WBTC -> USDC -> USDT
+                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, true, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_coin, true, clock, ctx);
+                
+                // Emit success event
+                event::emit(SwapExecuted {
+                    user,
+                    input_token: type_name::get<TELEBTC>(),
+                    output_token: type_name::get<USDT>(),
+                    input_amount,
+                    output_amount: coin::value(&return_usdt_coin),
+                    timestamp,
+                });
+                
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(return_usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+            }
+            else{
+                abort EINVALID_TARGET_TOKEN
+            }
+        };
+        
+        // quick merge all coins and return them
+        let merged_telebtc_coin = merge_two_coins(telebtc_coin, remaining_telebtc_coin, ctx);
+        let merged_wbtc_coin = merge_two_coins(wbtc_coin, remaining_wbtc_coin, ctx);
+        let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+        let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+        let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+
+        // This should not be reached
+        return (false, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
+    }
+
+    // The below code is for the reverse case (ascii telebtc is smaller than ascii btc), so the pool is <BTC,TELEBTC>
+
+    /// Get quote for selling TELEBTC to target token
+    /// This function calculates how much of the target token you can get for a given amount of TELEBTC
+    /// Supports multi-hop swaps through WBTC and USDC as intermediate tokens
+    /// 
+    /// Parameters:
+    /// - pool_usdc_sui: Pool for USDC-SUI trading
+    /// - pool_usdc_usdt: Pool for USDC-USDT trading  
+    /// - pool_usdc_wbtc: Pool for USDC-WBTC trading
+    /// - pool_telebtc_wbtc: Pool for TELEBTC-WBTC trading
+    /// - input_amount: Amount of TELEBTC to sell
+    /// - min_output_amount: Minimum acceptable output amount
+    /// 
+    /// Returns: (bool, u64) - (success_flag, output_amount)
+    public fun getQuoteSellTelebtc_rev<TargetToken>(
+        pool_usdc_sui: &pool::Pool<USDC, SUI>,
+        pool_usdc_usdt: &pool::Pool<USDC, USDT>,
+        pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &pool::Pool<BTC, TELEBTC>,
+        input_amount: u64, // amount of telebtc provided
+        min_output_amount: u64, // min amount of target token to get
+    ): (bool, u64) {
+        if (is_same<TargetToken, BTC>()) {
+            // Direct swap: TELEBTC -> WBTC (using reverse pool)
+            return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, input_amount, min_output_amount, true)
+        };
+        if (is_same<TargetToken, USDC>()) {
+            // Two-hop swap: TELEBTC -> WBTC -> USDC
+            let (status1, out1) = getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
+            return getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, min_output_amount, false);
+        };
+        if (is_same<TargetToken, SUI>()) {
+            // Three-hop swap: TELEBTC -> WBTC -> USDC -> SUI
+            let (status1, out1) = getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            return getOutputAmount<USDC, SUI>(pool_usdc_sui, out2, min_output_amount, true);
+        };
+        if (is_same<TargetToken, USDT>()) {
+            // Three-hop swap: TELEBTC -> WBTC -> USDC -> USDT
+            let (status1, out1) = getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            return getOutputAmount<USDC, USDT>(pool_usdc_usdt, out2, min_output_amount, true);
+        };
+        (false, 10) //for testing only
+    }
+
+    /// Get quote for buying TELEBTC with input token
+    /// This function calculates how much TELEBTC you can get for a given amount of input token
+    /// Used in burn router functions for reverse swaps
+    /// 
+    /// Parameters:
+    /// - pool_usdc_sui: Pool for USDC-SUI trading
+    /// - pool_usdc_usdt: Pool for USDC-USDT trading
+    /// - pool_usdc_wbtc: Pool for USDC-WBTC trading  
+    /// - pool_telebtc_wbtc: Pool for TELEBTC-WBTC trading
+    /// - input_amount: Amount of input token to spend
+    /// - min_output_amount: Minimum acceptable TELEBTC amount
+    /// 
+    /// Returns: (bool, u64) - (success_flag, output_amount)
+    public fun getQuoteBuyTelebtc_rev<InputToken>(
+        pool_usdc_sui: &pool::Pool<USDC, SUI>,
+        pool_usdc_usdt: &pool::Pool<USDC, USDT>,
+        pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &pool::Pool<BTC, TELEBTC>,
+        input_amount: u64, // amount of input token provided
+        min_output_amount: u64, // min amount of telebtc to get
+    ): (bool, u64) {
+        if (is_same<InputToken, BTC>()) {
+            // Direct swap: BTC -> TELEBTC
+            return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, input_amount, min_output_amount, true);
+        };
+        if (is_same<InputToken, USDC>()) {
+            // Two-hop swap: USDC -> WBTC -> TELEBTC
+            let (status1, out1) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, input_amount, 0, true);
+            return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, out1, min_output_amount, true);
+        };
+        if (is_same<InputToken, SUI>()) {
+            // Three-hop swap: SUI -> USDC -> WBTC -> TELEBTC
+            let (status1, out1) = getOutputAmount<USDC, SUI>(pool_usdc_sui, input_amount, 0, false);
+            let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, true);
+            return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, out2, min_output_amount, true);
+        };
+        if (is_same<InputToken, USDT>()) {
+            // Three-hop swap: USDT -> USDC -> WBTC -> TELEBTC
+            let (status1, out1) = getOutputAmount<USDC, USDT>(pool_usdc_usdt, input_amount, 0, false);
+            let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, out2, min_output_amount, true);
+        };
+        (false, 0)
+    }
+
+
     /// Main swap function that handles all token swaps
     /// Supports both directions: tokens -> TELEBTC and TELEBTC -> tokens
     /// Implements multi-hop swaps through WBTC and USDC as intermediate tokens
@@ -264,63 +780,62 @@ module teleswap::dexconnector {
     /// - ctx: Transaction context
     /// 
     /// Returns: (bool, Coin<TELEBTC>, Coin<WBTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) - Success flag and updated coins
-    public fun mainSwapTokens<TargetToken>(
+    public fun mainSwapTokens_rev<TargetToken>(
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
-        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<BTC, TELEBTC>,
         input_amount: u64, // amount of input token provided
         min_output_amount: u64, // min amount of telebtc to get
-        mut telebtc_token: Coin<TELEBTC>,
-        mut wbtc_token: Coin<BTC>,
-        mut sui_token: Coin<SUI>,
-        mut usdt_token: Coin<USDT>,
-        mut usdc_token: Coin<USDC>,
+        mut telebtc_coins: vector<Coin<TELEBTC>>,
+        mut wbtc_coins: vector<Coin<BTC>>,
+        mut sui_coins: vector<Coin<SUI>>,
+        mut usdt_coins: vector<Coin<USDT>>,
+        mut usdc_coins: vector<Coin<USDC>>,
         clock: &sui::clock::Clock,
         ctx: &mut TxContext
     ):(bool, Coin<TELEBTC>, Coin<BTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) {
         let user = sui::tx_context::sender(ctx);
         let timestamp = sui::clock::timestamp_ms(clock);
         
+        // Assure only one token is being swapped based on non-empty coin lists
+        let input_token_count = if (std::vector::length(&wbtc_coins) > 0) 1 else 0 + 
+                                if (std::vector::length(&sui_coins) > 0) 1 else 0 + 
+                                if (std::vector::length(&usdt_coins) > 0) 1 else 0 + 
+                                if (std::vector::length(&usdc_coins) > 0) 1 else 0 +
+                                if (std::vector::length(&telebtc_coins) > 0) 1 else 0;
+        assert!(input_token_count == 1, EINVALID_INPUT_LIST_LENGTH);
+
+        // merge all coins if there are multiple coins
+        // the first coin is the input coin, the second coin is the remaining coin
+        // if not the swap type, then both coins are zero
+        let (wbtc_coin,remaining_wbtc_coin) = merge_and_split<BTC>(wbtc_coins, input_amount, ctx);
+        let (sui_coin,remaining_sui_coin) = merge_and_split<SUI>(sui_coins, input_amount, ctx);
+        let (usdt_coin,remaining_usdt_coin) = merge_and_split<USDT>(usdt_coins, input_amount, ctx);
+        let (usdc_coin,remaining_usdc_coin) = merge_and_split<USDC>(usdc_coins, input_amount, ctx);
+        let (telebtc_coin,remaining_telebtc_coin) = merge_and_split<TELEBTC>(telebtc_coins, input_amount, ctx);
+        
         if(is_same<TargetToken, TELEBTC>()) {
             // Direction: Other tokens -> TELEBTC
-            // Need to find out which token is not zero (the token to be swapped to telebtc)
-            let telebtc_amount = coin::value(&telebtc_token);
-            let wbtc_amount = coin::value(&wbtc_token);
-            let sui_amount = coin::value(&sui_token);
-            let usdt_amount = coin::value(&usdt_token);
-            let usdc_amount = coin::value(&usdc_token);
+            assert!(coin::value(&telebtc_coin) == 0, EINVALID_AMOUNT);
 
-            // Validate that only one input token has non-zero amount
-            let input_token_count = if (telebtc_amount > 0) 1 else 0 + 
-                                   if (wbtc_amount > 0) 1 else 0 + 
-                                   if (sui_amount > 0) 1 else 0 + 
-                                   if (usdt_amount > 0) 1 else 0 + 
-                                   if (usdc_amount > 0) 1 else 0;
-            assert!(input_token_count == 1, EINVALID_AMOUNT);
-
-            // Emit quote request event
-            let input_token_type = if (wbtc_amount > 0) type_name::get<BTC>() else
-                                  if (sui_amount > 0) type_name::get<SUI>() else
-                                  if (usdt_amount > 0) type_name::get<USDT>() else
-                                  if (usdc_amount > 0) type_name::get<USDC>() else
-                                  type_name::get<TELEBTC>();
-
-            // Get quote for the swap
-            let (status, quote_amount) = if (wbtc_amount > 0) {
-                assert!(wbtc_amount == input_amount, EINVALID_INPUT_AMOUNT);
-                getQuoteBuyTelebtc<BTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, wbtc_amount, min_output_amount)
-            } else if (sui_amount > 0) {
-                assert!(sui_amount == input_amount, EINVALID_INPUT_AMOUNT);
-                getQuoteBuyTelebtc<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, sui_amount, min_output_amount)
-            } else if (usdt_amount > 0) {
-                assert!(usdt_amount == input_amount, EINVALID_INPUT_AMOUNT);
-                getQuoteBuyTelebtc<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, usdt_amount, min_output_amount)
-            } else if (usdc_amount > 0) {
-                assert!(usdc_amount == input_amount, EINVALID_INPUT_AMOUNT);
-                getQuoteBuyTelebtc<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, usdc_amount, min_output_amount)
+            // Determine which token is being swapped and get quote
+            let input_token_type: std::type_name::TypeName;
+            let (status, quote_amount) = if (coin::value(&wbtc_coin) > 0) {
+                input_token_type = type_name::get<BTC>();
+                getQuoteBuyTelebtc_rev<BTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+            } else if (coin::value(&sui_coin) > 0) {
+                input_token_type = type_name::get<SUI>();
+                getQuoteBuyTelebtc_rev<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+            } else if (coin::value(&usdt_coin) > 0) {
+                input_token_type = type_name::get<USDT>();
+                getQuoteBuyTelebtc_rev<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+            } else if (coin::value(&usdc_coin) > 0) {
+                input_token_type = type_name::get<USDC>();
+                getQuoteBuyTelebtc_rev<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else {
+                abort ENOT_ENOUGH_COINS;
                 (false, 0)
             };
 
@@ -330,94 +845,121 @@ module teleswap::dexconnector {
                     user,
                     input_token: input_token_type,
                     output_token: type_name::get<TELEBTC>(),
-                    input_amount: if (wbtc_amount > 0) wbtc_amount else
-                                  if (sui_amount > 0) sui_amount else
-                                  if (usdt_amount > 0) usdt_amount else
-                                  if (usdc_amount > 0) usdc_amount else 0,
-                    reason: b"slippage_too_high",
+                    input_amount: input_amount,
+                    reason: b"0001slippage_too_high",
                     timestamp,
                 });
-                return (false, telebtc_token, wbtc_token, sui_token, usdt_token, usdc_token)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                return (false, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             };
 
             // Execute the swap based on input token type
-            if(wbtc_amount > 0) {
+            if(coin::value(&wbtc_coin) > 0) {
                 // Direct swap: WBTC -> TELEBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, false, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, true, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
                     user,
                     input_token: type_name::get<BTC>(),
                     output_token: type_name::get<TELEBTC>(),
-                    input_amount: wbtc_amount,
+                    input_amount: input_amount,
                     output_amount: coin::value(&return_telebtc_coin),
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, sui_token, usdt_token, usdc_token)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
-            else if(usdc_amount > 0) {
+            else if(coin::value(&usdc_coin) > 0) {
                 // Two-hop swap: USDC -> WBTC -> TELEBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, false, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_token, return_wbtc_coin, false, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, true, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
                     user,
                     input_token: type_name::get<USDC>(),
                     output_token: type_name::get<TELEBTC>(),
-                    input_amount: usdc_amount,
+                    input_amount: input_amount,
                     output_amount: coin::value(&return_telebtc_coin),
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, sui_token, usdt_token, return_usdc_coin)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
-            else if(sui_amount > 0) {
+            else if(coin::value(&sui_coin) > 0) {
                 // Three-hop swap: SUI -> USDC -> WBTC -> TELEBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, false, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_token, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_token, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, true, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_coin, true, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
                     user,
                     input_token: type_name::get<SUI>(),
                     output_token: type_name::get<TELEBTC>(),
-                    input_amount: sui_amount,
+                    input_amount: input_amount,
                     output_amount: coin::value(&return_telebtc_coin),   
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, return_sui_coin, usdt_token, return_usdc_coin)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(return_sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
-            else if(usdt_amount > 0) {
+            else if(coin::value(&usdt_coin) > 0) {
                 // Three-hop swap: USDT -> USDC -> WBTC -> TELEBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, false, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_token, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_token, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, true, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_coin, true, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
                     user,
                     input_token: type_name::get<USDT>(),
                     output_token: type_name::get<TELEBTC>(),
-                    input_amount: usdt_amount,
+                    input_amount: input_amount,
                     output_amount: coin::value(&return_telebtc_coin),
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, sui_token, return_usdt_coin, return_usdc_coin)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(return_usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
             else{
-                abort EVALID_TARGET_TOKEN
+                abort EINVALID_TARGET_TOKEN
             }
         }
         else{
             // Direction: TELEBTC -> Other tokens
             // Get quote for buying target token with TELEBTC
-            let (status, amount) = getQuoteBuyTelebtc<TargetToken>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount);
+            let (status, amount) = getQuoteSellTelebtc_rev<TargetToken>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount);
             if (!status) {
                 // Slippage issue, return the original coins and emit failure event
                 event::emit(SwapFailed {
@@ -425,19 +967,25 @@ module teleswap::dexconnector {
                     input_token: type_name::get<TELEBTC>(),
                     output_token: type_name::get<TargetToken>(),
                     input_amount,
-                    reason: b"slippage_too_high",
+                    reason: b"0000slippage_too_high",
                     timestamp,
                 });
-                return (false, telebtc_token, wbtc_token, sui_token, usdt_token, usdc_token)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                return (false, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             };
             
             // Validate coin amounts - only TELEBTC should have non-zero amount
-            let telebtc_amount = coin::value(&telebtc_token);
-            let wbtc_amount = coin::value(&wbtc_token);
-            let sui_amount = coin::value(&sui_token);
-            let usdt_amount = coin::value(&usdt_token);
-            let usdc_amount = coin::value(&usdc_token);
-
+            let telebtc_amount = coin::value(&telebtc_coin);
+            let wbtc_amount = coin::value(&wbtc_coin);
+            let sui_amount = coin::value(&sui_coin);
+            let usdt_amount = coin::value(&usdt_coin);
+            let usdc_amount = coin::value(&usdc_coin);
+        
             assert!(telebtc_amount > 0, EINVALID_AMOUNT);
             assert!(wbtc_amount == 0, EINVALID_AMOUNT);
             assert!(sui_amount == 0, EINVALID_AMOUNT);
@@ -448,7 +996,7 @@ module teleswap::dexconnector {
             // Execute the swap based on target token type
             if(is_same<TargetToken, BTC>()) {
                 // Direct swap: TELEBTC -> WBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, false, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
@@ -460,12 +1008,18 @@ module teleswap::dexconnector {
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, sui_token, usdt_token, usdc_token)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
             else if(is_same<TargetToken, USDC>()) {
                 // Two-hop swap: TELEBTC -> WBTC -> USDC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, true, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_token, return_wbtc_coin, false, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
@@ -477,13 +1031,19 @@ module teleswap::dexconnector {
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, sui_token, usdt_token, return_usdc_coin)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
             else if(is_same<TargetToken, SUI>()) {
                 // Three-hop swap: TELEBTC -> WBTC -> USDC -> SUI
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, true, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_token, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_token, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_coin, true, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
@@ -495,13 +1055,19 @@ module teleswap::dexconnector {
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, return_sui_coin, usdt_token, return_usdc_coin)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(return_sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
             else if(is_same<TargetToken, USDT>()) {
                 // Three-hop swap: TELEBTC -> WBTC -> USDC -> USDT
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_token, wbtc_token, true, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_token, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_token, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_coin, true, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
@@ -513,14 +1079,27 @@ module teleswap::dexconnector {
                     timestamp,
                 });
                 
-                return (true, return_telebtc_coin, return_wbtc_coin, sui_token, return_usdt_coin, return_usdc_coin)
+                // quick merge all coins and return them
+                let merged_telebtc_coin = merge_two_coins(return_telebtc_coin, remaining_telebtc_coin, ctx);
+                let merged_wbtc_coin = merge_two_coins(return_wbtc_coin, remaining_wbtc_coin, ctx);
+                let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+                let merged_usdt_coin = merge_two_coins(return_usdt_coin, remaining_usdt_coin, ctx);
+                let merged_usdc_coin = merge_two_coins(return_usdc_coin, remaining_usdc_coin, ctx);
+                return (true, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
             }
             else{
-                abort EVALID_TARGET_TOKEN
+                abort EINVALID_TARGET_TOKEN
             }
         };
         
-        // Default return (should not be reached)
-        (false, telebtc_token, wbtc_token, sui_token, usdt_token, usdc_token)
+        // quick merge all coins and return them
+        let merged_telebtc_coin = merge_two_coins(telebtc_coin, remaining_telebtc_coin, ctx);
+        let merged_wbtc_coin = merge_two_coins(wbtc_coin, remaining_wbtc_coin, ctx);
+        let merged_sui_coin = merge_two_coins(sui_coin, remaining_sui_coin, ctx);
+        let merged_usdt_coin = merge_two_coins(usdt_coin, remaining_usdt_coin, ctx);
+        let merged_usdc_coin = merge_two_coins(usdc_coin, remaining_usdc_coin, ctx);
+
+        // This should not be reached
+        return (false, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
     }
 } 

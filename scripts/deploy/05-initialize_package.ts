@@ -184,7 +184,6 @@ async function main() {
     if (!exchangeAdminId) throw new Error('exchangeAdminId missing in package_id.json');
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);
-    const CHAIN_ID = 1; // example chain id
     const LOCKERS_ADDRESS = activeAddress; // reserved param; using deployer
     const THIRD_PARTY_ID = 1;
     const THIRD_PARTY_FEE = 0; // bps
@@ -198,7 +197,6 @@ async function main() {
         tx.pure(STARTING_BLOCK_NUMBER),
         tx.pure(PROTOCOL_PERCENTAGE_FEE),
         tx.pure(LOCKER_PERCENTAGE_FEE),
-        tx.pure(CHAIN_ID),
         tx.pure(LOCKERS_ADDRESS),
         tx.pure(btcrelayIdForInputs), // ID
         tx.pure(TREASURY),
