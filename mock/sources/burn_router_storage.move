@@ -46,6 +46,10 @@ module teleswap::burn_router_storage {
 
         third_party_fee: Table<u64, u64>,
         third_party_address: Table<u64, address>,
+        
+        // Rewarder configuration
+        rewarder_address: address,
+        rewarder_percentage_fee: u64, // Rewarder fee percentage
     }
 
     /// Admin control structure for the contract
@@ -76,6 +80,8 @@ module teleswap::burn_router_storage {
     public fun get_locker_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.locker_percentage_fee }
     public fun get_treasury(burn_router: &BurnRouter): address { burn_router.treasury }
     public fun get_bitcoin_fee_oracle(burn_router: &BurnRouter): address { burn_router.bitcoin_fee_oracle }
+    public fun get_rewarder_address(burn_router: &BurnRouter): address { burn_router.rewarder_address }
+    public fun get_rewarder_percentage_fee(burn_router: &BurnRouter): u64 { burn_router.rewarder_percentage_fee }
 
     /// @notice Validates that the provided BTCRelay object is the legitimate one
     /// @dev Compares the object ID with the stored legitimate BTCRelay ID.
@@ -368,6 +374,8 @@ module teleswap::burn_router_storage {
         treasury: address,
         bitcoin_fee_oracle: address,
         btcrelay_object_id: ID, // Add field to store legitimate BTCRelay object ID
+        rewarder_address: address,
+        rewarder_percentage_fee: u64,
         ctx: &mut TxContext
     ): BurnRouter {
         BurnRouter {
@@ -387,6 +395,8 @@ module teleswap::burn_router_storage {
             third_party_address: table::new(ctx),
             locker_percentage_fee,
             btcrelay_object_id, // Add field to store legitimate BTCRelay object ID
+            rewarder_address,
+            rewarder_percentage_fee,
         }
     }
 

@@ -1,4 +1,4 @@
-import { parseRequest, createRequest, SimpleTransferRequest, tryAsVout, createBitcoinTransactionJson } from './bitcoin_parser';
+import { parseRequest, createRequest, SimpleTransferRequest, tryAsVout, createBitcoinTransactionJson, createSwapRequest } from './bitcoin_parser';
 
 // Test data
 const testCases = [
@@ -167,13 +167,36 @@ function runAllTests() {
     let res = createBitcoinTransactionJson(
         "test",
         1,
-        "0xe4e1bf5689c6bb8ad58cab8e4852ca197a146f933a267b9aba5f908322f69595",
+        "0x878799c85d1bcbd9419b150d2e2dabb1cdc49f361944e9235d8204ee45871c2b",
         1000,
         0,
         0,
         false
     )
     console.log(res);
+
+    let res2 = createBitcoinTransactionJson(
+        "test2",
+        1, // app id
+        "0xe4e1bf5689c6bb8ad58cab8e4852ca197a146f933a267b9aba5f908322f69595",
+        1000, // teleporter fee
+        0, // speed
+        1, // third party
+        true, // swap or not
+        0, // exchangeToken 0: WBTC, 1: USDC, 2: USDT, 3: SUI
+        0.05, // input btcamount
+        0.1* 100000000 // min output amount
+    )
+    console.log(res2);
+    console.log(res2.vout.length)
+    
+    // Print vout as hex byte string for Move file
+    //const voutHex = res2.vout.startsWith('0x') ? res2.vout.slice(2) : res2.vout;
+    const voutHex = '0300ca9a3b000000001a1976a9144062c8aeed4f81c2d73ff854a2957021191e20b688ac00000000000000003c6a3a01e4e1bf5689c6bb8ad58cab8e4852ca197a146f933a267b9aba5f908322f69595000003e80000000000000000000000000000000000000000000000000005f5e1001a1976a91412ab8dc588ca9d5787dde7eb29569da63c3a238c88ac'
+    const voutBytes = voutHex.match(/.{2}/g) || [];
+    const voutByteString = 'b"' + voutBytes.map((byte: string) => '\\x' + byte).join('') + '"';
+    console.log('Move vout format:');
+    console.log(voutByteString);
     // testCreateRequest();
     // testParseRequest();
     // testRoundTrip();

@@ -146,7 +146,7 @@ export async function CCBurnFactory() {
         else if (type.includes('LockerAdminCap')) {
             lockerAdminCapabilityId = objectId;
         }
-        else if (type.includes('TreasuryCap')) {
+        else if (type.includes('TreasuryCap')&&type.includes('TELEBTC')) {
             telebtcTreasuryCapId = objectId;
         } 
         else if (type.includes('TeleBTCCap')) {

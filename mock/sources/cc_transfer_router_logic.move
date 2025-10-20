@@ -79,6 +79,8 @@ module teleswap::cc_transfer_router_logic {
         treasury: address,
         locker_percentage_fee: u64,
         btcrelay_object_id: ID,
+        rewarder_address: address,
+        rewarder_percentage_fee: u64,
         admin: &mut CC_TRANSFER_ADMIN,
         ctx: &mut TxContext
     ){
@@ -92,6 +94,8 @@ module teleswap::cc_transfer_router_logic {
             treasury,
             locker_percentage_fee,
             btcrelay_object_id,
+            rewarder_address,
+            rewarder_percentage_fee,
             ctx
         );
         transfer::public_share_object(router);
@@ -147,7 +151,7 @@ module teleswap::cc_transfer_router_logic {
         telebtc_cap: &mut TeleBTCCap,
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         ctx: &mut TxContext
-    ):(u64,u64,u64,u64,u64,u64,address){
+    ):(u64,u64,u64,u64,u64,u64,u64,address){
         // Calculate fees
         let amount = cc_transfer_router_storage::get_amount(router, tx_id);
         let protocol_fee = (amount * cc_transfer_router_storage::get_protocol_percentage_fee(router)) / 10000;
@@ -155,7 +159,8 @@ module teleswap::cc_transfer_router_logic {
         let third_party_id = cc_transfer_router_storage::get_third_party_id(router, tx_id);
         let third_party_fee = (amount * cc_transfer_router_storage::get_third_party_fee(router, third_party_id)) / 10000;
         let locker_fee = (amount * cc_transfer_router_storage::get_locker_percentage_fee(router)) / 10000;
-        let remained_amount = amount - protocol_fee - network_fee - third_party_fee;
+        let rewarder_fee = (amount * cc_transfer_router_storage::get_rewarder_percentage_fee(router)) / 10000;
+        let remained_amount = amount - protocol_fee - network_fee - third_party_fee - rewarder_fee;
         let recipient_address = cc_transfer_router_storage::get_recipient(router, tx_id);
 
         // Mint teleBTC and get the coins
@@ -184,11 +189,16 @@ module teleswap::cc_transfer_router_logic {
             transfer::public_transfer(fee_coins, locker_address);
         };
 
+        if (rewarder_fee > 0) {
+            let fee_coins = coin::split(&mut coins, rewarder_fee, ctx);
+            transfer::public_transfer(fee_coins, cc_transfer_router_storage::get_rewarder_address(router));
+        };
+
         // Transfer remaining coins to recipient
         transfer::public_transfer(coins, recipient_address);
 
         // Return fee details
-        (amount, remained_amount, network_fee, locker_fee, protocol_fee, third_party_fee, recipient_address)
+        (amount, remained_amount, network_fee, locker_fee, protocol_fee, third_party_fee, rewarder_fee, recipient_address)
     }
 
     /// Parses and validates a cross-chain transfer request
@@ -266,7 +276,7 @@ module teleswap::cc_transfer_router_logic {
     /// @param telebtc_cap TeleBTC capability object
     /// @param treasury_cap Treasury capability object
     /// @param ctx The transaction context
-    public entry fun wrap(
+    public fun wrap(
         router: &mut CCTransferRouterCap,
         tx_and_proof: TxAndProof,
         locker_locking_script: vector<u8>,
@@ -331,7 +341,7 @@ module teleswap::cc_transfer_router_logic {
         let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
 
         // Process the wrap request
-        let (amount,received_amount,network_fee,locker_fee,protocol_fee,third_party_fee,recipient_address) = mint_and_distribute(router, locker_cap, locker_locking_script, tx_id, telebtc_cap, treasury_cap, ctx);
+        let (amount,received_amount,network_fee,locker_fee,protocol_fee,third_party_fee,rewarder_fee,recipient_address) = mint_and_distribute(router, locker_cap, locker_locking_script, tx_id, telebtc_cap, treasury_cap, ctx);
        
         cc_transfer_router_storage::delete_tx_and_proof(tx_and_proof);
         // Emit wrap completion event
@@ -342,7 +352,7 @@ module teleswap::cc_transfer_router_logic {
             user: recipient_address,
             teleporter: tx_context::sender(ctx),
             amounts: vector[amount, received_amount],
-            fees: vector[network_fee, locker_fee, protocol_fee, third_party_fee],
+            fees: vector[network_fee, locker_fee, protocol_fee, third_party_fee, rewarder_fee],
             third_party_id: cc_transfer_router_storage::get_third_party_id(router, tx_id)
         });
         

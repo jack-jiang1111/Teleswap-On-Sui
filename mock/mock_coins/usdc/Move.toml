@@ -1,13 +1,13 @@
 [package]
 name = "BridgedUSDC"
 version = "0.0.1"
-published-at = "0xe33e371d19350936a4a4f18545feef8fb494e1bae963424a67252a23a72e9fd5"
+published-at = "0xdc7ee4261c069561d8325c222cafec0282dc86e1fbef3b643ee55dd1c6ba871e"
 
 [dependencies]
 MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", rev = "e54b798790ed", subdir = "crates/sui-framework/packages/move-stdlib", override = true }
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "e54b798790ed", override = true }
 
 [addresses]
-bridged_usdc = "0xe33e371d19350936a4a4f18545feef8fb494e1bae963424a67252a23a72e9fd5"
+bridged_usdc = "0xdc7ee4261c069561d8325c222cafec0282dc86e1fbef3b643ee55dd1c6ba871e"
 
 

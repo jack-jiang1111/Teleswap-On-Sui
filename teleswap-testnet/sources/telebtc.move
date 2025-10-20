@@ -1,4 +1,4 @@
-#[allow(unused)]
+#[allow(unused,deprecated_usage)]
 module teleswap::telebtc {
     // This is a mock contract for the telebtc contract
     // any address can mint and burn telebtc
@@ -208,7 +208,7 @@ module teleswap::telebtc {
 
     // Admin functions
     /// Renounces admin ownership by transferring control to zero address
-    public entry fun renounce_admin_ownership(
+    public fun renounce_admin_ownership(
         cap: &mut TeleBTCCap,
         admin: TELEBTC_ADMIN,
         ctx: &TxContext
@@ -223,7 +223,7 @@ module teleswap::telebtc {
     /**
      * @dev change maximum mint limit per epoch.
      */
-    public entry fun set_max_mint_limit(
+    public fun set_max_mint_limit(
         cap: &mut TeleBTCCap,
         admin: &TELEBTC_ADMIN,
         new_limit: u64
@@ -236,7 +236,7 @@ module teleswap::telebtc {
     /**
      * @dev change blocks number per epoch.
      */
-    public entry fun set_epoch_length(
+    public fun set_epoch_length(
         cap: &mut TeleBTCCap,
         admin: &TELEBTC_ADMIN,
         new_length: u64

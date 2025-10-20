@@ -76,13 +76,13 @@ const POOL_CONFIGS: PoolConfig[] = [
     initialPrice: 0.0001, // 1 BTC = 10,000 USDC
   },
   {
-    name: 'TELEBTC-BTC',
+    name: 'BTC-TELEBTC',
     coinTypeA: '',
     coinTypeB: '',
-    amountA: 1 * 10**8, // 1 TELEBTC (8 decimals)
-    amountB: 1 * 10**8, // 1 BTC (8 decimals)
+    amountA: 1 * 10**8, // 1 BTC (8 decimals)
+    amountB: 1 * 10**8, // 1 TELEBTC (8 decimals)
     tickSpacing: 60,
-    initialPrice: 1, // 1 TELEBTC = 1 BTC
+    initialPrice: 1, // 1 BTC = 1 TELEBTC
   },
 ];
 // usdc-sui pool: 0xe5f548d7dd8773f30a47900e26528e560ef2f151f174e520fc959ceeb811497c
@@ -117,7 +117,7 @@ async function main() {
   COIN_TYPES.USDC = `${mockTokens.usdc.packageId}::usdc::USDC`;
   COIN_TYPES.USDT = `${mockTokens.usdt.packageId}::usdt::USDT`;
   COIN_TYPES.BTC = `${mockTokens.btc.packageId}::btc::BTC`;
-  COIN_TYPES.TELEBTC = `${packageManager.getMainPackage('testnet').packageId}::telebtc::TELEBTC`;
+  COIN_TYPES.TELEBTC = `${packageManager.getTelebtc().packageId}::telebtc::TELEBTC`;
 
   console.log('Coin Types:');
   console.log('- SUI:', COIN_TYPES.SUI);
@@ -153,8 +153,8 @@ async function main() {
   POOL_CONFIGS[1].coinTypeB = COIN_TYPES.USDT;
   POOL_CONFIGS[2].coinTypeA = COIN_TYPES.USDC;
   POOL_CONFIGS[2].coinTypeB = COIN_TYPES.BTC;
-  POOL_CONFIGS[3].coinTypeA = COIN_TYPES.TELEBTC;
-  POOL_CONFIGS[3].coinTypeB = COIN_TYPES.BTC;
+  POOL_CONFIGS[3].coinTypeA = COIN_TYPES.BTC;
+  POOL_CONFIGS[3].coinTypeB = COIN_TYPES.TELEBTC;
 
   // Initialize Cetus SDK
   const sdk = initCetusSDK({ network: 'testnet', fullNodeUrl: network.url, wallet: activeAddress });
@@ -188,6 +188,8 @@ async function main() {
       // Respect config order: front is A, later is B
       const coin_type_a = poolConfig.coinTypeA;
       const coin_type_b = poolConfig.coinTypeB;
+      const metadata_a = await fetchCoinMetadataId(client, coin_type_a);
+      const metadata_b = await fetchCoinMetadataId(client, coin_type_b);
       const amount_a = poolConfig.amountA;
       const amount_b = poolConfig.amountB;
       const coin_decimals_a = getDecimals(coin_type_a);
@@ -219,8 +221,8 @@ async function main() {
         fix_amount_a: true,
         tick_lower,
         tick_upper,
-        metadata_a: await fetchCoinMetadataId(client, coin_type_a),
-        metadata_b: await fetchCoinMetadataId(client, coin_type_b),
+        metadata_a: metadata_a,
+        metadata_b: metadata_b,
         slippage: 0.05,
       });
 
@@ -310,9 +312,23 @@ main().catch((e) => {
 
 // Helpers
 async function fetchCoinMetadataId(client: SuiClient, coinType: string): Promise<string> {
-  const meta = await client.getCoinMetadata({ coinType });
-  if (!meta || !meta.id) throw new Error(`No metadata found for ${coinType}`);
-  return meta.id as string;
+  // Try on-chain metadata first
+  try {
+    const meta = await client.getCoinMetadata({ coinType });
+    if (meta && meta.id) return meta.id as string;
+  } catch (_) {}
+
+  // Fallback to local package_id.json via PackageManager if on-chain metadata is missing
+  const pm = new PackageManager();
+  const mock = pm.getMockTokens();
+  const telebtc = pm.getTelebtc();
+
+  if (coinType.includes('::btc::BTC') && mock.btc?.metadataId) return mock.btc.metadataId;
+  if (coinType.includes('::usdc::USDC') && mock.usdc?.metadataId) return mock.usdc.metadataId;
+  if (coinType.includes('::usdt::USDT') && mock.usdt?.metadataId) return mock.usdt.metadataId;
+  if (coinType.includes('::telebtc::TELEBTC') && telebtc?.metadataId) return telebtc.metadataId;
+
+  throw new Error(`No metadata found for ${coinType}`);
 }
 
 async function getSdkCompatibleKeypair(activeAddress: string): Promise<SuiEd25519Keypair> {

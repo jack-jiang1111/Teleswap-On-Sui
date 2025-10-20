@@ -80,6 +80,8 @@ module teleswap::cc_transfer_router_logic {
         treasury: address,
         locker_percentage_fee: u64,
         btcrelay_object_id: ID,
+        rewarder_address: address,
+        rewarder_percentage_fee: u64,
         admin: &mut CC_TRANSFER_ADMIN,
         ctx: &mut TxContext
     ){
@@ -93,6 +95,8 @@ module teleswap::cc_transfer_router_logic {
             treasury,
             locker_percentage_fee,
             btcrelay_object_id,
+            rewarder_address,
+            rewarder_percentage_fee,
             ctx
         );
         transfer::public_share_object(router);
@@ -297,17 +301,10 @@ module teleswap::cc_transfer_router_logic {
         assert!(!is_request_used(router, tx_id), EREQUEST_USED);
 
         // Verify locktime is zero
-        let locktime = cc_transfer_router_storage::get_locktime(&tx_and_proof);
-        let mut is_all_zeros = true;
-        let mut i = 0;
-        while (i < vector::length(&locktime)) {
-            if (vector::borrow(&locktime, i) != &0u8) {
-                is_all_zeros = false;
-                break
-            };
-            i = i + 1;
-        };
-        assert!(is_all_zeros, ENONZERO_LOCKTIME);
+        assert!(
+            bitcoin_helper::equalzero(cc_transfer_router_storage::locktime(&tx_and_proof)),
+            ENONZERO_LOCKTIME
+        );
 
         // Save and validate the request
         save_cc_transfer_request(

@@ -38,8 +38,10 @@ export interface PackageIdStructure {
     exchangeAdminId: string;
     ccTransferAdminId: string;
     lockerAdminCapId: string;
+    upgradeCapId: string;
   };
   telebtc: {
+    packageId: string;
     adminId: string;
     capId: string;
     treasuryCapId: string;
@@ -117,9 +119,11 @@ export class PackageManager {
         burnRouterAdminId: '',
         exchangeAdminId: '',
         ccTransferAdminId: '',
-        lockerAdminCapId: ''
+        lockerAdminCapId: '',
+        upgradeCapId: ''
       },
       telebtc: {
+        packageId: '',
         adminId: '',
         capId: '',
         treasuryCapId: '',
@@ -201,6 +205,7 @@ export class PackageManager {
       exchangeAdminId: this.data.adminCaps.exchangeAdminId,
       ccTransferAdminId: this.data.adminCaps.ccTransferAdminId,
       lockerAdminCapId: this.data.adminCaps.lockerAdminCapId,
+      telebtcPackageId: this.data.telebtc.packageId,
       telebtcAdminId: this.data.telebtc.adminId,
       telebtcCapId: this.data.telebtc.capId,
       telebtcTreasuryCapId: this.data.telebtc.treasuryCapId,

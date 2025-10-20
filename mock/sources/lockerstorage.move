@@ -1545,22 +1545,22 @@ module teleswap::lockerstorage {
         locker.net_minted = new_amount as u256;
     }
     /// Setters for mock state
-    public entry fun set_is_locker(cap: &mut LockerCap, value: bool) {
+    public fun set_is_locker(cap: &mut LockerCap, value: bool) {
         cap.is_locker = value;
     }
-    public entry fun set_locker_target_address(cap: &mut LockerCap, addr: address) {
+    public fun set_locker_target_address(cap: &mut LockerCap, addr: address) {
         cap.locker_target_address = addr;
     }
-    public entry fun set_burn_return(cap: &mut LockerCap, amount: u64) {
+    public fun set_burn_return(cap: &mut LockerCap, amount: u64) {
         cap.burn_return = amount;
     }
-    public entry fun set_slash_idle_locker_return(cap: &mut LockerCap, value: bool) {
+    public fun set_slash_idle_locker_return(cap: &mut LockerCap, value: bool) {
         cap.slash_idle_locker_return = value;
     }
-    public entry fun set_slash_thief_locker_return(cap: &mut LockerCap, value: bool) {
+    public fun set_slash_thief_locker_return(cap: &mut LockerCap, value: bool) {
         cap.slash_thief_locker_return = value;
     }
-    public entry fun set_price_modifier(cap: &mut LockerCap, value: u256) {
+    public fun set_price_modifier(cap: &mut LockerCap, value: u256) {
         cap.price_modifier = value;
     }
 

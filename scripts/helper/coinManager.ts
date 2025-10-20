@@ -4,7 +4,7 @@ import { Ed25519Keypair } from '@mysten/sui.js/keypairs/ed25519';
 
 export interface CoinManagementResult {
   swapCoinIds: string[];
-  gasCoin: { objectId: string; version: string; digest: string };
+  gasCoin: { objectId: string; version: string; digest: string; balance: string };
 }
 
 export class CoinManager {
@@ -16,6 +16,54 @@ export class CoinManager {
     this.keypair = keypair;
   }
 
+  /**
+   * Prepare SUI coins for a swap ensuring a dedicated gas coin is available.
+   * Algorithm:
+   * 1) Sort SUI coins largest->smallest. Select coins until selectedSum >= swapAmount.
+   * 2) Compute restSum from remaining coins.
+   * 3) If restSum >= gasBudget -> use the largest remaining coin as gas coin.
+   * 4) Else if total < swapAmount + gasBudget -> throw insufficient.
+   * 5) Else pre-split: split gasBudget out of the largest coin into a dedicated gas coin (separate tx), then re-fetch and reselect swap coins excluding the gas coin.
+   * Returns swap coin ids and gas coin descriptor (objectId/version/digest).
+   */
+  async prepareSuiForSwap(swapAmount: number, gasBudget: number): Promise<{ swapCoinIds: string[]; }> {
+    const coins = await this.getCoinsSorted('0x2::sui::SUI');
+    const total = coins.reduce((s, c) => s + parseInt(c.balance), 0);
+    if (total < swapAmount + gasBudget*1.2) {
+      throw new Error(`Insufficient SUI balance. Need ${swapAmount + gasBudget}, have ${total}`);
+    }
+
+    const selectSwapCoins = (coinList: any[]): { selected: string[]; remaining: any[]; selectedSum: number } => {
+      const selected: string[] = [];
+      let sum = 0;
+      for (const c of coinList) {
+        if (sum >= swapAmount) break;
+        selected.push(c.coinObjectId);
+        sum += parseInt(c.balance);
+      }
+      const remaining = coinList.filter((c: any) => !selected.includes(c.coinObjectId));
+      return { selected, remaining, selectedSum: sum };
+    };
+
+    // Initial selection
+    let { selected, remaining } = selectSwapCoins(coins);
+    const restSum = remaining.reduce((s, c) => s + parseInt(c.balance), 0);
+
+    if (restSum >= gasBudget*1.2) {
+      return { swapCoinIds: selected };
+    }
+
+    // Need to pre-split a dedicated gas coin
+    // Split out of the largest coin
+    const largest = coins[0].coinObjectId;
+    const success = await this.splitCoin(largest, gasBudget*1.2); // give a 20% buffer 
+    if(!success) {
+      throw new Error('Failed to split coin');
+    }
+    console.log('✅ Successfully split coin, preparing to swap again');
+    // if sucess, we can recursively call the function
+    return this.prepareSuiForSwap(swapAmount, gasBudget);
+  }
   /**
    * Get coins for a specific type, sorted by balance (largest first)
    */
@@ -36,7 +84,7 @@ export class CoinManager {
   /**
    * Get the largest SUI coin for gas
    */
-  async getGasCoin(): Promise<{ objectId: string; version: string; digest: string }> {
+  async getGasCoin(): Promise<{ objectId: string; version: string; digest: string; balance: string }> {
     const suiCoins = await this.getCoinsSorted('0x2::sui::SUI');
     const gasCoin = suiCoins[0]; // Largest coin
     
@@ -44,57 +92,17 @@ export class CoinManager {
       objectId: gasCoin.coinObjectId,
       version: gasCoin.version,
       digest: gasCoin.digest,
+      balance: gasCoin.balance,
     };
   }
 
   /**
-   * Get swap coins for a specific type, handling SUI gas coin splitting
+   * Get swap coins for a specific type
+   * Returns string[] of coin IDs
    */
   async getSwapCoins(coinType: string, swapAmount: number): Promise<string[]> {
     const coins = await this.getCoinsSorted(coinType);
-    
-    if (coinType === '0x2::sui::SUI') {
-      // For SUI, we need to handle gas coin splitting
-      if (coins.length === 1) {
-        // User has only one SUI coin - we need to split it
-        const singleCoin = coins[0];
-        const totalBalance = parseInt(singleCoin.balance);
-        
-        // Check if we have enough balance (including gas buffer)
-        const gasBuffer = 100000000; // 0.1 SUI buffer for gas
-        const requiredTotal = swapAmount + gasBuffer;
-        
-        if (totalBalance < requiredTotal) {
-          throw new Error(`Insufficient SUI balance. Need ${requiredTotal} (${swapAmount} for swap + ${gasBuffer} for gas), have ${totalBalance}`);
-        }
-        
-        // Return the single coin ID - it will be split in the transaction
-        return [singleCoin.coinObjectId];
-      } else {
-        // User has multiple SUI coins - use all except the largest (which is reserved for gas)
-        const swapCoins = coins.slice(1);
-        
-        if (swapCoins.length === 0) {
-          throw new Error('No SUI coins available for swap (all reserved for gas)');
-        }
-        
-        // Check if we have enough balance in swap coins
-        const totalSwapBalance = swapCoins.reduce((sum, coin) => sum + parseInt(coin.balance), 0);
-        if (totalSwapBalance < swapAmount) {
-          throw new Error(`Insufficient SUI balance for swap. Need ${swapAmount}, have ${totalSwapBalance} in swap coins`);
-        }
-        
-        return swapCoins.map(coin => coin.coinObjectId);
-      }
-    } else {
-      // For non-SUI tokens, use all available coins
-      const totalBalance = coins.reduce((sum, coin) => sum + parseInt(coin.balance), 0);
-      if (totalBalance < swapAmount) {
-        throw new Error(`Insufficient balance. Need ${swapAmount}, have ${totalBalance}`);
-      }
-      
-      return coins.map(coin => coin.coinObjectId);
-    }
+    return coins.map(coin => coin.coinObjectId);
   }
 
   /**
@@ -116,26 +124,8 @@ export class CoinManager {
   /**
    * Split a coin to get a specific amount
    */
-  async splitCoin(coinId: string, amount: number): Promise<string> {
+  async splitCoin(coinId: string, amount: number): Promise<boolean> {
     const txb = new TransactionBlock();
-    txb.setGasBudget(100000000);
-    
-    // Get gas coins for this transaction
-    const { data: gasObjects } = await this.client.getOwnedObjects({
-      owner: this.keypair.toSuiAddress(),
-      filter: { StructType: '0x2::coin::Coin<0x2::sui::SUI>' },
-      options: { showContent: true },
-    });
-    
-    if (gasObjects.length === 0) {
-      throw new Error('No SUI coins found for gas');
-    }
-    
-    txb.setGasPayment([{
-      objectId: gasObjects[0].data!.objectId,
-      version: gasObjects[0].data!.version,
-      digest: gasObjects[0].data!.digest,
-    }]);
     
     const coin = txb.object(coinId);
     const splitCoin = txb.splitCoins(coin, [amount]);
@@ -150,15 +140,15 @@ export class CoinManager {
       },
     });
 
-    const createdObjects = result.objectChanges?.filter(
-      (change) => change.type === 'created'
-    );
-    
-    if (createdObjects && createdObjects.length > 0) {
-      return (createdObjects[0] as any).objectId;
+    // wait until the transaction is processed
+    // Check if result has digest property (SuiTransactionBlockResponse)
+    if ('digest' in result) {
+      await this.client.waitForTransactionBlock({
+          digest: result.digest,
+          options: { showEffects: true, showEvents: true }
+      });
     }
-    
-    throw new Error('Failed to split coin');
+    return result.effects?.status?.status === "success";
   }
 
   /**

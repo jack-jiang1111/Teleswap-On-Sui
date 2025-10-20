@@ -20,6 +20,7 @@ module teleswap::cc_exchange_storage {
     const EINVALID_LENGTH: u64 = 603;
     const ENOT_OWNER: u64 = 604;
     const EALREADY_INITIALIZED: u64 = 605;
+    const EINVALID_THIRD_PARTY_ID: u64 = 606;
 
     // Structures
     // Main logic structure
@@ -68,6 +69,8 @@ module teleswap::cc_exchange_storage {
         third_party_address: address,
         reward_distributor: address,
         special_teleporter: address,
+        rewarder_address: address,
+        rewarder_percentage_fee: u64,
         ctx: &mut TxContext
     ) {
         assert!(is_owner(exchange_admin, tx_context::sender(ctx)), ENOT_OWNER);
@@ -89,6 +92,11 @@ module teleswap::cc_exchange_storage {
             third_party_address: table::new(ctx),
             locker_percentage_fee,
             reward_distributor,
+            
+            // Rewarder configuration
+            rewarder_address,
+            rewarder_percentage_fee,
+            
             bridge_token_mapping: table::new(ctx),
             final_amount: table::new(ctx),
             // private vars
@@ -130,6 +138,7 @@ module teleswap::cc_exchange_storage {
         protocol_fee: u64,
         third_party_fee: u64,
         locker_fee: u64,
+        rewarder_fee: u64,
     }
 
     // constructor for ExchangeRequest
@@ -164,8 +173,12 @@ module teleswap::cc_exchange_storage {
             bridge_percentage_fee,
             third_party,
             protocol_fee: exchange_cap.protocol_percentage_fee,
-            third_party_fee: exchange_cap.third_party_fee[third_party],
+            third_party_fee: {
+                assert!(table::contains(&exchange_cap.third_party_fee, third_party), EINVALID_THIRD_PARTY_ID);
+                *table::borrow(&exchange_cap.third_party_fee, third_party)
+            },
             locker_fee: exchange_cap.locker_percentage_fee,
+            rewarder_fee: exchange_cap.rewarder_percentage_fee, 
         }
     }
 
@@ -210,11 +223,16 @@ module teleswap::cc_exchange_storage {
         //filler_address: Table<vector<u8>, Table<address, Table<address, Table<u64, Table<u64, Table<u64, address>>>>>>,
         locker_percentage_fee: u64,
         reward_distributor: address,
+        
+        // Rewarder configuration
+        rewarder_address: address,
+        rewarder_percentage_fee: u64,
+        
         bridge_token_mapping: Table<address, Table<u64, address>>, // used for fill logic
         final_amount: Table<vector<u8>, u64>, // txId to final amount (used for fill logic)
         
         // Private variables
-        cc_exchange_requests: Table<vector<u8>, ExchangeRequest>,
+        cc_exchange_requests: Table<vector<u8>, ExchangeRequest>, // mapping tx id to exchange request
 
         // exchange vault, holding TeleBtc coins for failed swap
         exchange_vault: sui::balance::Balance<TELEBTC>,
@@ -482,6 +500,10 @@ module teleswap::cc_exchange_storage {
         request.locker_fee
     }
 
+    public fun rewarder_fee(request: &ExchangeRequest): u64 {
+        request.rewarder_fee
+    }
+
     public fun remained_input_amount(request: &ExchangeRequest): u64 {
         request.remained_input_amount
     }
@@ -531,6 +553,14 @@ module teleswap::cc_exchange_storage {
         storage.reward_distributor
     }
 
+    public fun rewarder_address(storage: &ExchangeCap): address {
+        storage.rewarder_address
+    }
+
+    public fun rewarder_percentage_fee(storage: &ExchangeCap): u64 {
+        storage.rewarder_percentage_fee
+    }
+
     public fun get_third_party_address_from_storage(storage: &ExchangeCap, third_party_id: u64): address {
         if (table::contains(&storage.third_party_address, third_party_id)) {
             *table::borrow(&storage.third_party_address, third_party_id)
@@ -550,6 +580,10 @@ module teleswap::cc_exchange_storage {
 
     public(package) fun set_request_locker_fee(request: &mut ExchangeRequest, locker_fee: u64) {
         request.locker_fee = locker_fee;
+    }
+
+    public(package) fun set_request_rewarder_fee(request: &mut ExchangeRequest, rewarder_fee: u64) {
+        request.rewarder_fee = rewarder_fee;
     }
 
     public(package) fun set_request_remained_input_amount(request: &mut ExchangeRequest, remained_input_amount: u64) {

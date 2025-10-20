@@ -92,6 +92,7 @@ async function main() {
   let telebtcCapId = '';
   let telebtcTreasuryCapId = '';
   let telebtcMetadataId = '';
+  let upgradeCapId = '';
   if(result.effects?.status?.status !== 'success') {
     console.log('Transaction failed:', result.effects);
     throw new Error('Transaction failed');
@@ -112,6 +113,7 @@ async function main() {
       else if (type.includes('TELEBTC_ADMIN')) telebtcAdminId = objectId;
       else if (type.includes('TeleBTCCap')) telebtcCapId = objectId;
       else if (type.includes('TreasuryCap') && type.includes('telebtc::TELEBTC')) telebtcTreasuryCapId = objectId;
+      else if (type.includes('UpgradeCap')) upgradeCapId = objectId;
       else if (type.includes('CoinMetadata')) telebtcMetadataId = objectId;
       else if (type === 'package') mainPackageId = objectId;
     } catch (error) {
@@ -130,6 +132,7 @@ async function main() {
   if (telebtcCapId) console.log('telebtcCapId:', telebtcCapId); else throw new Error('Missing TeleBTCCap');
   if (telebtcTreasuryCapId) console.log('telebtcTreasuryCapId:', telebtcTreasuryCapId); else throw new Error('Missing TreasuryCap<TELEBTC>');
   if (telebtcMetadataId) console.log('telebtcMetadataId:', telebtcMetadataId); else throw new Error('Missing CoinMetadata<TELEBTC>');
+  if (upgradeCapId) console.log('upgradeCapId:', upgradeCapId); else throw new Error('Missing UpgradeCap');
   // Update package_id.json using PackageManager
   const packageManager = new PackageManager();
   
@@ -142,11 +145,13 @@ async function main() {
     burnRouterAdminId: burnRouterAdminId,
     exchangeAdminId: exchangeAdminId,
     ccTransferAdminId: ccTransferAdminId,
-    lockerAdminCapId: lockerAdminCapId
+    lockerAdminCapId: lockerAdminCapId,
+    upgradeCapId: upgradeCapId
   });
   
   // Set telebtc data
   packageManager.setTelebtc({
+    packageId: mainPackageId,
     adminId: telebtcAdminId,
     capId: telebtcCapId,
     treasuryCapId: telebtcTreasuryCapId,
@@ -156,6 +161,27 @@ async function main() {
   packageManager.save();
 
   console.log('package published and IDs recorded.');
+
+  // Update published-at in Move.toml
+  const moveTomlPath = path.join(pkgDir, 'Move.toml');
+  if (fs.existsSync(moveTomlPath)) {
+    let moveTomlContent = fs.readFileSync(moveTomlPath, 'utf8');
+    const publishedAtRegex = /published-at\s*=\s*"[^"]*"/;
+    const newPublishedAt = `published-at = "${mainPackageId}"`;
+    
+    if (publishedAtRegex.test(moveTomlContent)) {
+      moveTomlContent = moveTomlContent.replace(publishedAtRegex, newPublishedAt);
+    } else {
+      // If no published-at field exists, add it after the [package] section
+      const packageSectionRegex = /(\[package\]\s*name\s*=\s*"[^"]*"\s*version\s*=\s*"[^"]*")/;
+      if (packageSectionRegex.test(moveTomlContent)) {
+        moveTomlContent = moveTomlContent.replace(packageSectionRegex, `$1\n${newPublishedAt}`);
+      }
+    }
+    
+    fs.writeFileSync(moveTomlPath, moveTomlContent);
+    console.log(`Updated published-at in Move.toml to: ${mainPackageId}`);
+  }
 }
 
 function parseTransactionDigest(output: string): string | null {

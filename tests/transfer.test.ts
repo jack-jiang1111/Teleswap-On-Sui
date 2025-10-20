@@ -36,11 +36,13 @@ describe('CCTransfer Test Suite', () => {
     const APP_ID = 1;
     const PROTOCOL_PERCENTAGE_FEE = 20; // Means %0.2
     const LOCKER_PERCENTAGE_FEE = 10; // Means %0.1
+    const REWARDER_PERCENTAGE_FEE = 5; // Means %0.05
     const PRICE_WITH_DISCOUNT_RATIO = 9500; // Means %95
     
     const STARTING_BLOCK_NUMBER = 100;
     const TREASURY =       "0x0000000000000000000000000000000000000000000000000000000000000002"; // Valid Sui address
     const LOCKER_ADDRESS = "0x0000000000000000000000000000000000000000000000000000000000000003"; // example locker address
+    const REWARDER_ADDRESS = "0x0000000000000000000000000000000000000000000000000000000000000005"; // example rewarder address
     const RECEIVER_ADDRESS = "0x0000000000000000000000000000000000000000000000000000000000000004"; // example receiver address
     let LOCKER1_LOCKING_SCRIPT = '0xa9144062c8aeed4f81c2d73ff854a2957021191e20b687';
 
@@ -56,6 +58,7 @@ describe('CCTransfer Test Suite', () => {
         teleporterBalance: number;
         treasuryBalance: number;
         lockerBalance: number;
+        rewarderBalance: number;
     }> {
         const client = new SuiClient({ url: getFullnodeUrl('localnet') });
 
@@ -79,11 +82,17 @@ describe('CCTransfer Test Suite', () => {
             coinType: `${ccTransferRouterPackageId}::telebtc::TELEBTC`
         });
 
+        const rewarderBalance = await client.getBalance({
+            owner: REWARDER_ADDRESS,
+            coinType: `${ccTransferRouterPackageId}::telebtc::TELEBTC`
+        });
+
         return {
             recipientBalance: Number(recipientBalance.totalBalance),
             teleporterBalance: Number(teleporterBalance.totalBalance),
             treasuryBalance: Number(treasuryBalance.totalBalance),
-            lockerBalance: Number(lockerBalance.totalBalance)
+            lockerBalance: Number(lockerBalance.totalBalance),
+            rewarderBalance: Number(rewarderBalance.totalBalance)
         };
     }
 
@@ -94,11 +103,13 @@ describe('CCTransfer Test Suite', () => {
         teleporterFee: number,
         protocolFee: number,
         lockerFee: number,
+        rewarderFee: number,
         initialBalances: {
             recipientBalance: number;
             teleporterBalance: number;
             treasuryBalance: number;
             lockerBalance: number;
+            rewarderBalance: number;
         }
     ): Promise<void> {
         const client = new SuiClient({ url: getFullnodeUrl('localnet') });
@@ -124,11 +135,17 @@ describe('CCTransfer Test Suite', () => {
             coinType: `${ccTransferRouterPackageId}::telebtc::TELEBTC`
         });
 
+        const rewarderBalance = await client.getBalance({
+            owner: REWARDER_ADDRESS,
+            coinType: `${ccTransferRouterPackageId}::telebtc::TELEBTC`
+        });
+
         // Check balance changes
         expect(Number(recipientBalance.totalBalance) - initialBalances.recipientBalance).toBe(receivedAmount);
         expect(Number(teleporterBalance.totalBalance) - initialBalances.teleporterBalance).toBe(teleporterFee);
         expect(Number(treasuryBalance.totalBalance) - initialBalances.treasuryBalance).toBe(protocolFee);
         expect(Number(lockerBalance.totalBalance) - initialBalances.lockerBalance).toBe(lockerFee);
+        expect(Number(rewarderBalance.totalBalance) - initialBalances.rewarderBalance).toBe(rewarderFee);
     }
 
     // set mock return for btcrelay (checkTxProof function)
@@ -184,6 +201,8 @@ describe('CCTransfer Test Suite', () => {
                 pure(TREASURY),
                 pure(LOCKER_PERCENTAGE_FEE),
                 pure(btcrelayCapId),
+                pure(REWARDER_ADDRESS),
+                pure(REWARDER_PERCENTAGE_FEE),
                 object(ccTransferRouterAdminId),
             ],
             signer: deployer
@@ -238,8 +257,12 @@ describe('CCTransfer Test Suite', () => {
                 CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 * PROTOCOL_PERCENTAGE_FEE / 10000
             );
 
+            const rewarderFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 * REWARDER_PERCENTAGE_FEE / 10000
+            );
+
             // Calculate amount that user should have received
-            const receivedAmount = CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 - lockerFee - teleporterFee - protocolFee;
+            const receivedAmount = CC_REQUESTS.normalCCTransfer.bitcoinAmount*1e8 - lockerFee - teleporterFee - protocolFee - rewarderFee;
 
             // Create transaction to call the wrap function
             const tx = new TransactionBlock();
@@ -291,6 +314,7 @@ describe('CCTransfer Test Suite', () => {
                 teleporterFee,
                 protocolFee,
                 lockerFee,
+                rewarderFee,
                 initialBalances
             );
         }, 60000);
@@ -312,8 +336,12 @@ describe('CCTransfer Test Suite', () => {
                 CC_REQUESTS.normalCCTransfer_ZeroFee.bitcoinAmount*1e8 * PROTOCOL_PERCENTAGE_FEE / 10000
             );
 
+            const rewarderFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_ZeroFee.bitcoinAmount*1e8 * REWARDER_PERCENTAGE_FEE / 10000
+            );
+
             // Calculate amount that user should have received
-            const receivedAmount = CC_REQUESTS.normalCCTransfer_ZeroFee.bitcoinAmount*1e8 - lockerFee - teleporterFee - protocolFee;
+            const receivedAmount = CC_REQUESTS.normalCCTransfer_ZeroFee.bitcoinAmount*1e8 - lockerFee - teleporterFee - protocolFee - rewarderFee;
 
             // Create transaction to call the wrap function
             const tx = new TransactionBlock();
@@ -365,6 +393,7 @@ describe('CCTransfer Test Suite', () => {
                 teleporterFee,
                 protocolFee,
                 lockerFee,
+                rewarderFee,
                 initialBalances
             );
         }, 60000); // 60 second timeout for this test
@@ -402,8 +431,12 @@ describe('CCTransfer Test Suite', () => {
                 CC_REQUESTS.normalCCTransfer_zeroProtocolFee.bitcoinAmount * 1e8 * CC_REQUESTS.normalCCTransfer_zeroProtocolFee.teleporterFee / 10000
             );
 
+            const rewarderFee = Math.floor(
+                CC_REQUESTS.normalCCTransfer_zeroProtocolFee.bitcoinAmount * 1e8 * REWARDER_PERCENTAGE_FEE / 10000
+            );
+
             // Calculate amount that user should have received
-            const receivedAmount = CC_REQUESTS.normalCCTransfer_zeroProtocolFee.bitcoinAmount * 1e8 - lockerFee - teleporterFee - protocolFee;
+            const receivedAmount = CC_REQUESTS.normalCCTransfer_zeroProtocolFee.bitcoinAmount * 1e8 - lockerFee - teleporterFee - protocolFee - rewarderFee;
 
             // Create transaction to call the wrap function
             const tx = new TransactionBlock();
@@ -455,6 +488,7 @@ describe('CCTransfer Test Suite', () => {
                 teleporterFee,
                 protocolFee,
                 lockerFee,
+                rewarderFee,
                 initialBalances
             );
 

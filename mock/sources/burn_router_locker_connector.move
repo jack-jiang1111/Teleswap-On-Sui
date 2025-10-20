@@ -1,4 +1,4 @@
-#[allow(unused_use,unused_variable,unused_const,unused_mut_parameter,unused_field)]
+#[allow(unused_use,unused_variable,unused_const,unused_mut_parameter,unused_field,lint(self_transfer))]
 module teleswap::burn_router_locker_connector {
     use sui::table::{Self, Table};
     use teleswap::burn_router_storage::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
@@ -64,7 +64,8 @@ module teleswap::burn_router_locker_connector {
 
     /// @notice Unwraps TeleBTC for cross-chain withdrawal (connector function)
     /// @param burn_router The BurnRouter object
-    /// @param amount_coin The TeleBTC coins to unwrap
+    /// @param amount_coins Vector of TeleBTC coins to unwrap
+    /// @param amount The amount to unwrap from the merged coins
     /// @param user_script The user's Bitcoin script hash
     /// @param script_type The user's script type
     /// @param locker_locking_script The locker's Bitcoin locking script
@@ -77,7 +78,8 @@ module teleswap::burn_router_locker_connector {
     /// @return The amount of BTC the user will receive
     public(package) fun unwrap(
         burn_router: &mut BurnRouter,
-        amount_coin: Coin<TELEBTC>,
+        mut amount_coins: vector<Coin<TELEBTC>>,
+        amount: u64,
         user_script: vector<u8>,
         script_type: u8,
         locker_locking_script: vector<u8>,
@@ -97,8 +99,39 @@ module teleswap::burn_router_locker_connector {
             EINVALID_BTCRELAY
         );
 
-        // Extract amount from coin
-        let amount = coin::value(&amount_coin);
+        // Merge all coins and calculate total amount in one loop
+        let mut total_amount = 0;
+        let mut merged_coin = coin::zero<TELEBTC>(ctx);
+        let mut i = 0;
+        while (i < vector::length(&amount_coins)) {
+            let coin_to_merge = vector::borrow(&amount_coins, i);
+            let coin_amount = coin::value(coin_to_merge);
+            total_amount = total_amount + coin_amount;
+            i = i + 1;
+        };
+
+        // Check if merged amount is sufficient
+        assert!(total_amount >= amount, ERROR_INSUFFICIENT_FUNDS);
+
+        // Merge all coins into one
+        while (vector::length(&amount_coins) > 0) {
+            let coin_to_merge = vector::pop_back(&mut amount_coins);
+            coin::join(&mut merged_coin, coin_to_merge);
+        };
+
+        // Split the specified amount for unwrapping
+        let amount_coin = coin::split(&mut merged_coin, amount, ctx);
+        
+        // Return the remaining coin to the user
+        if (coin::value(&merged_coin) > 0) {
+            transfer::public_transfer(merged_coin, tx_context::sender(ctx));
+        } else {
+            coin::destroy_zero(merged_coin);
+        };
+
+        // Consume the empty vector
+        vector::destroy_empty(amount_coins);
+
         let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script, locker_cap);
 
         
@@ -110,7 +143,7 @@ module teleswap::burn_router_locker_connector {
             locker_cap
         );
 
-        let (remaining_amount, protocol_fee, third_party_fee, locker_fee) = burn_and_distribute_fees(
+        let (remaining_amount, protocol_fee, third_party_fee, locker_fee, rewarder_fee) = burn_and_distribute_fees(
             burn_router,
             amount_coin,
             locker_locking_script,
@@ -139,11 +172,12 @@ module teleswap::burn_router_locker_connector {
         vector::push_back(&mut amounts, amount-remaining_amount); // fees
         vector::push_back(&mut amounts, remaining_amount); // remaining_amount
 
-        // Create fees vector: [bitcoin_fee, locker_fee, protocol_fee, third_party_fee]
+        // Create fees vector: [bitcoin_fee, locker_fee, protocol_fee, third_party_fee, rewarder_fee]
         let mut fees = vector::empty<u64>();
         vector::push_back(&mut fees, locker_fee); // locker_fee with bitcoin_fee
         vector::push_back(&mut fees, protocol_fee);
         vector::push_back(&mut fees, third_party_fee);
+        vector::push_back(&mut fees, rewarder_fee);
 
         // Emit NewUnwrap event 
         event::emit(NewUnwrap {
@@ -177,7 +211,8 @@ module teleswap::burn_router_locker_connector {
     /// @return The amount of BTC the user will receive
     public(package) fun unwrap_mock(
         burn_router: &mut BurnRouter,
-        amount_coin: Coin<TELEBTC>,
+        mut amount_coins: vector<Coin<TELEBTC>>,
+        amount: u64,
         user_script: vector<u8>,
         script_type: u8,
         locker_locking_script: vector<u8>,
@@ -196,9 +231,38 @@ module teleswap::burn_router_locker_connector {
             burn_router_storage::validate_btcrelay(burn_router, btcrelay),
             EINVALID_BTCRELAY
         );
+// Merge all coins and calculate total amount in one loop
+        let mut total_amount = 0;
+        let mut merged_coin = coin::zero<TELEBTC>(ctx);
+        let mut i = 0;
+        while (i < vector::length(&amount_coins)) {
+            let coin_to_merge = vector::borrow(&amount_coins, i);
+            let coin_amount = coin::value(coin_to_merge);
+            total_amount = total_amount + coin_amount;
+            i = i + 1;
+        };
 
-        // Extract amount from coin
-        let amount = coin::value(&amount_coin);
+        // Check if merged amount is sufficient
+        assert!(total_amount >= amount, ERROR_INSUFFICIENT_FUNDS);
+
+        // Merge all coins into one
+        while (vector::length(&amount_coins) > 0) {
+            let coin_to_merge = vector::pop_back(&mut amount_coins);
+            coin::join(&mut merged_coin, coin_to_merge);
+        };
+
+        // Split the specified amount for unwrapping
+        let amount_coin = coin::split(&mut merged_coin, amount, ctx);
+        
+        // Return the remaining coin to the user
+        if (coin::value(&merged_coin) > 0) {
+            transfer::public_transfer(merged_coin, tx_context::sender(ctx));
+        } else {
+            coin::destroy_zero(merged_coin);
+        };
+
+        // Consume the empty vector
+        vector::destroy_empty(amount_coins);
         let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script, locker_cap);
 
         
@@ -210,7 +274,7 @@ module teleswap::burn_router_locker_connector {
             locker_cap
         );
 
-        let (remaining_amount, protocol_fee, third_party_fee, locker_fee) = burn_and_distribute_fees_mock(
+        let (remaining_amount, protocol_fee, third_party_fee, locker_fee, rewarder_fee) = burn_and_distribute_fees_mock(
             burn_router,
             amount_coin,
             locker_locking_script,
@@ -239,11 +303,12 @@ module teleswap::burn_router_locker_connector {
         vector::push_back(&mut amounts, amount-remaining_amount); // fees
         vector::push_back(&mut amounts, remaining_amount); // remaining_amount
 
-        // Create fees vector: [bitcoin_fee, locker_fee, protocol_fee, third_party_fee]
+        // Create fees vector: [bitcoin_fee, locker_fee, protocol_fee, third_party_fee, rewarder_fee]
         let mut fees = vector::empty<u64>();
         vector::push_back(&mut fees, locker_fee); // locker_fee with bitcoin_fee
         vector::push_back(&mut fees, protocol_fee);
         vector::push_back(&mut fees, third_party_fee);
+        vector::push_back(&mut fees, rewarder_fee);
 
         // Emit NewUnwrap event 
         event::emit(NewUnwrap {
@@ -513,16 +578,17 @@ module teleswap::burn_router_locker_connector {
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         ctx: &mut TxContext,
         locker_cap: &mut LockerCap
-    ): (u64, u64, u64, u64) {
+    ): (u64, u64, u64, u64, u64) {
         // Calculate fees
         let amount = coin::value(&amount_coin);
         let protocol_fee = (amount * burn_router_storage::get_protocol_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
         let third_party_fee = (amount * burn_router_storage::get_third_party_fee(burn_router, third_party)) / MAX_PERCENTAGE_FEE;
         let locker_fee = (amount * burn_router_storage::get_locker_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let rewarder_fee = (amount * burn_router_storage::get_rewarder_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
         let bitcoin_fee = burn_router_storage::get_bitcoin_fee(burn_router);
         let combined_locker_fee = locker_fee + bitcoin_fee;
-        assert!(amount  > DUST_SATOSHI_AMOUNT + protocol_fee + third_party_fee + combined_locker_fee, ELOW_FEE); // handle negative number use this trick
-        let remained_amount = amount - protocol_fee - third_party_fee - combined_locker_fee;
+        assert!(amount  > DUST_SATOSHI_AMOUNT + protocol_fee + third_party_fee + combined_locker_fee + rewarder_fee, ELOW_FEE); // handle negative number use this trick
+        let remained_amount = amount - protocol_fee - third_party_fee - combined_locker_fee - rewarder_fee;
         
         let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
 
@@ -545,11 +611,16 @@ module teleswap::burn_router_locker_connector {
             transfer::public_transfer(fee_coins, locker_target_address);
         };
 
+        if (rewarder_fee > 0) {
+            let fee_coins = coin::split(&mut coins, rewarder_fee, ctx);
+            transfer::public_transfer(fee_coins, burn_router_storage::get_rewarder_address(burn_router));
+        };
+
         // Burn remaining coins using locker burn function
         burn(locker_locking_script, coins, telebtc_cap, treasury_cap, locker_cap, ctx);
 
         // Return fee details
-        (remained_amount, protocol_fee, third_party_fee, combined_locker_fee)
+        (remained_amount, protocol_fee, third_party_fee, combined_locker_fee, rewarder_fee)
     }
 
     fun burn_and_distribute_fees_mock(
@@ -561,16 +632,17 @@ module teleswap::burn_router_locker_connector {
         treasury_cap: &mut TreasuryCap<TELEBTC>,
         ctx: &mut TxContext,
         locker_cap: &mut LockerCap
-    ): (u64, u64, u64, u64) {
+    ): (u64, u64, u64, u64, u64) {
         // Calculate fees
         let amount = coin::value(&amount_coin);
         let protocol_fee = (amount * burn_router_storage::get_protocol_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
         let third_party_fee = (amount * burn_router_storage::get_third_party_fee(burn_router, third_party)) / MAX_PERCENTAGE_FEE;
         let locker_fee = (amount * burn_router_storage::get_locker_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
+        let rewarder_fee = (amount * burn_router_storage::get_rewarder_percentage_fee(burn_router)) / MAX_PERCENTAGE_FEE;
         let bitcoin_fee = burn_router_storage::get_bitcoin_fee(burn_router);
         let combined_locker_fee = locker_fee + bitcoin_fee;
-        assert!(amount  > DUST_SATOSHI_AMOUNT + protocol_fee + third_party_fee + combined_locker_fee, ELOW_FEE); // handle negative number use this trick
-        let remained_amount = amount - protocol_fee - third_party_fee - combined_locker_fee;
+        assert!(amount  > DUST_SATOSHI_AMOUNT + protocol_fee + third_party_fee + combined_locker_fee + rewarder_fee, ELOW_FEE); // handle negative number use this trick
+        let remained_amount = amount - protocol_fee - third_party_fee - combined_locker_fee - rewarder_fee;
         
         let locker_target_address = lockerstorage::get_locker_target_address_mock(locker_locking_script,locker_cap);
 
@@ -593,11 +665,16 @@ module teleswap::burn_router_locker_connector {
             transfer::public_transfer(fee_coins, locker_target_address);
         };
 
+        if (rewarder_fee > 0) {
+            let fee_coins = coin::split(&mut coins, rewarder_fee, ctx);
+            transfer::public_transfer(fee_coins, burn_router_storage::get_rewarder_address(burn_router));
+        };
+
         // Burn remaining coins using locker burn function
         burn_mock(locker_locking_script, coins, telebtc_cap, treasury_cap, locker_cap, ctx);
 
         // Return fee details
-        (remained_amount, protocol_fee, third_party_fee, combined_locker_fee)
+        (remained_amount, protocol_fee, third_party_fee, combined_locker_fee, rewarder_fee)
     }
 
     /// @notice Burns TeleBTC by a locker (connector function)

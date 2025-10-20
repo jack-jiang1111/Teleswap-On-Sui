@@ -7,5 +7,5 @@ published-at = "0xd8e81354d5b8ab82cb3d6d9b0cab7c790b96d3493736596c6548fd8cec8a93
 Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
 
 [addresses]
-btcrelay = "0xd8e81354d5b8ab82cb3d6d9b0cab7c790b96d3493736596c6548fd8cec8a9379"
+btcrelay = "0x0"
 sui = "0x2" 

@@ -34,9 +34,11 @@ let userRequestedAmount = new BigNumber(100200000);
 let TRANSFER_DEADLINE = 20
 let PROTOCOL_PERCENTAGE_FEE = 5 // means 0.05%
 let LOCKER_PERCENTAGE_FEE = 10 // means 0.1%
+let REWARDER_PERCENTAGE_FEE = 3 // means 0.03%
 let SLASHER_PERCENTAGE_REWARD = 5 // means 0.05%
 let BITCOIN_FEE = 49700 // estimation of Bitcoin transaction fee in Satoshi
 let TREASURY = "0x0000000000000000000000000000000000000000000000000000000000000002";
+let REWARDER_ADDRESS = "0x0000000000000000000000000000000000000000000000000000000000000005";
 
 // P2PK: u8 = 1, 32bytes
 // P2WSH: u8 = 2, 32bytes
@@ -285,9 +287,14 @@ async function mintTeleBTCForTest(address = deployerAddress, amount = 10000): Pr
 async function sendBurnRequest(
     userScript: string,
     userScriptType: number,
-    coinObjectId: string
+    coinObjectIds: string[],
+    amount: number
 ): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 1000)); // wait for all object settle down
+    
+    // Create coin objects from coin IDs (similar to test_swap.ts approach)
+    const coinObjects = coinObjectIds.map(id => ({ type: 'object', value: id }));
+    
     // Call the Move unwrap (burn) entry function
     const result = await callMoveFunction({
         packageId: burnRouterPackageId,
@@ -295,7 +302,8 @@ async function sendBurnRequest(
         functionName: 'unwrap',
         arguments: [
             object(burnRouterId),
-            object(coinObjectId),                 // amount_coin (Coin<TELEBTC>) - actual coin object
+            { type: 'moveVec', value: { objects: coinObjects } }, // amount_coins (vector<Coin<TELEBTC>>) - vector of coin objects
+            pure(amount),                        // amount (u64) - amount to unwrap
             pure(hexToBytes(userScript)),        // user_script (vector<u8>)
             pure(userScriptType),                // script_type (u8)
             pure(LOCKER1_LOCKING_SCRIPT),        // locker_locking_script (vector<u8>)
@@ -397,6 +405,8 @@ describe('BurnRouter Test Suite', () => {
                     pure(BITCOIN_FEE),
                     pure(deployerAddress),
                     pure(btcrelayCapId),
+                    pure(REWARDER_ADDRESS),
+                    pure(REWARDER_PERCENTAGE_FEE),
                 ],
                 signer: deployer
             });
@@ -435,7 +445,8 @@ describe('BurnRouter Test Suite', () => {
     await setRelayLastSubmittedHeight(100);
     await setLockersIsLocker(true);
     const protocolFee = Math.floor(userRequestedAmount.toNumber() * PROTOCOL_PERCENTAGE_FEE / 10000);
-    const burntAmount = userRequestedAmount.toNumber() - protocolFee;
+    const rewarderFee = Math.floor(userRequestedAmount.toNumber() * REWARDER_PERCENTAGE_FEE / 10000);
+    const burntAmount = userRequestedAmount.toNumber() - protocolFee - rewarderFee;
     await setLockersBurnReturn(burntAmount);
     await setLockersGetLockerTargetAddress(LOCKER_TARGET_ADDRESS);
         
@@ -465,7 +476,8 @@ describe('BurnRouter Burn Proof Tests', () => {
          let burnResult = await sendBurnRequest(
              USER_SCRIPT_P2PKH,
              USER_SCRIPT_P2PKH_TYPE,
-             coinObjectId
+             [coinObjectId],
+             userRequestedAmount.toNumber()
          );
          //console.log("burnResult", burnResult);
          expect(burnResult.effects?.status?.status).toBe("success");
@@ -508,8 +520,9 @@ describe('BurnRouter Burn Proof Tests', () => {
         let burnResult = await sendBurnRequest(
             USER_SCRIPT_P2WPKH,
             USER_SCRIPT_P2WPKH_TYPE,
-            coinObjectId
-         );
+            [coinObjectId],
+            userRequestedAmount.toNumber()
+        );
 
         expect(burnResult.effects?.status?.status).toBe("success");
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -827,7 +840,8 @@ describe('BurnRouter Burn Proof Tests', () => {
         let burnResult = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            wrongUserRequestAmount.toNumber()
         );
         //expect(burnResult.effects?.status?.status).toBe("success");
         
@@ -1038,7 +1052,8 @@ describe('BurnRouter Unwrap Tests', () => {
         let result = await sendBurnRequest(
             USER_SCRIPT_P2PKH + '00', // invalid length
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
@@ -1049,7 +1064,8 @@ describe('BurnRouter Unwrap Tests', () => {
         result = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             1, // invalid type
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
@@ -1065,14 +1081,17 @@ describe('BurnRouter Unwrap Tests', () => {
         const prevBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc::TELEBTC");
         const prevProtocolBalance = await getCoinBalance(client, burnRouterPackageId, TREASURY, "telebtc::TELEBTC");
         const prevLockerBalance = await getCoinBalance(client, burnRouterPackageId, LOCKER_TARGET_ADDRESS, "telebtc::TELEBTC");
-        //console.log("prevBalance before burn", prevBalance,prevProtocolBalance,prevLockerBalance);
+        const prevRewarderBalance = await getCoinBalance(client, burnRouterPackageId, REWARDER_ADDRESS, "telebtc::TELEBTC");
+        //console.log("prevBalance before burn", prevBalance,prevProtocolBalance,prevLockerBalance,prevRewarderBalance);
 
         let protocolFee = Math.floor(userRequestedAmount.toNumber()*PROTOCOL_PERCENTAGE_FEE/10000);
+        let rewarderFee = Math.floor(userRequestedAmount.toNumber()*REWARDER_PERCENTAGE_FEE/10000);
         let lockerFee = Math.floor(userRequestedAmount.toNumber()*LOCKER_PERCENTAGE_FEE/10000)+BITCOIN_FEE; // Combined locker fee
         let result = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         //console.log("result", result.effects);
         expect(result.effects?.status?.status).toBe("success");
@@ -1080,11 +1099,13 @@ describe('BurnRouter Unwrap Tests', () => {
         const newUserBalance = await getCoinBalance(client, burnRouterPackageId, deployerAddress, "telebtc::TELEBTC");
         const newProtocolBalance = await getCoinBalance(client, burnRouterPackageId, TREASURY, "telebtc::TELEBTC");
         const newLockerBalance = await getCoinBalance(client, burnRouterPackageId, LOCKER_TARGET_ADDRESS, "telebtc::TELEBTC");
-        //console.log("newUserBalance after burn", newUserBalance,newProtocolBalance,newLockerBalance);
+        const newRewarderBalance = await getCoinBalance(client, burnRouterPackageId, REWARDER_ADDRESS, "telebtc::TELEBTC");
+        //console.log("newUserBalance after burn", newUserBalance,newProtocolBalance,newLockerBalance,newRewarderBalance);
         //printEvents(result);
         expect(prevBalance-newUserBalance).toBe(userRequestedAmount.toNumber());
         expect(newProtocolBalance-prevProtocolBalance).toBe(protocolFee);
         expect(newLockerBalance-prevLockerBalance).toBe(lockerFee);
+        expect(newRewarderBalance-prevRewarderBalance).toBe(rewarderFee);
 
     }, 60000);
 
@@ -1101,13 +1122,14 @@ describe('BurnRouter Unwrap Tests', () => {
         let result = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         
         // Expect failure with error code 205 (ELOW_AMOUNT)
         expect(result.effects?.status?.status).toBe("failure");
         expect(result.effects?.status?.error).toMatch(
-            /MoveAbort.*231/ // low fee
+            /MoveAbort.*235/ // low fee
         );
         
         // Verify the coin object still exists (burn didn't happen)
@@ -1152,7 +1174,8 @@ describe('BurnRouter Dispute Burn Tests', () => {
         let burnResult = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         expect(burnResult.effects?.status?.status).toBe("success");
         
@@ -1213,7 +1236,8 @@ describe('BurnRouter Dispute Burn Tests', () => {
         let burnResult = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         expect(burnResult.effects?.status?.status).toBe("success");
 
@@ -1255,7 +1279,8 @@ describe('BurnRouter Dispute Burn Tests', () => {
         let burnResult = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         expect(burnResult.effects?.status?.status).toBe("success");
         
@@ -1315,7 +1340,8 @@ describe('BurnRouter Dispute Burn Tests', () => {
         let burnResult = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         expect(burnResult.effects?.status?.status).toBe("success");
         
@@ -1632,7 +1658,8 @@ describe('BurnRouter Dispute Locker Tests', () => {
         let burnResult = await sendBurnRequest(
             USER_SCRIPT_P2PKH,
             USER_SCRIPT_P2PKH_TYPE,
-            coinObjectId
+            [coinObjectId],
+            userRequestedAmount.toNumber()
         );
         expect(burnResult.effects?.status?.status).toBe("success");
         

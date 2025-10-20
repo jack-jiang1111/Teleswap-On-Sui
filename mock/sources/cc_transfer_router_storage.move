@@ -62,7 +62,11 @@ module teleswap::cc_transfer_router_storage {
         third_party_fees: Table<u8, u64>,                        // Maps third party ID to fee
         third_party_addresses: Table<u8, address>,               // Maps third party ID to address
         third_party_mapping: Table<vector<u8>, u8>,              // Maps tx_id to third party ID
-        owner: address                                           // Contract owner address
+        owner: address,                                           // Contract owner address
+        
+        // Rewarder configuration
+        rewarder_address: address,
+        rewarder_percentage_fee: u64, // Rewarder fee percentage
     }
 
     // === Getter Functions for TxAndProof ===
@@ -195,11 +199,14 @@ module teleswap::cc_transfer_router_storage {
         treasury: address,
         locker_percentage_fee: u64,
         btcrelay_object_id: ID,
+        rewarder_address: address,
+        rewarder_percentage_fee: u64,
         ctx: &mut TxContext
     ): CCTransferRouterCap {
         // Validate fee percentages
         assert!(protocol_percentage_fee <= MAX_PERCENTAGE_FEE, EINVALID_PARAMETER);
         assert!(locker_percentage_fee <= MAX_PERCENTAGE_FEE, EINVALID_PARAMETER);
+        assert!(rewarder_percentage_fee <= MAX_PERCENTAGE_FEE, EINVALID_PARAMETER);
 
         let owner = admin.owner;
         CCTransferRouterCap {
@@ -215,7 +222,9 @@ module teleswap::cc_transfer_router_storage {
             third_party_fees: table::new(ctx),
             third_party_addresses: table::new(ctx),
             third_party_mapping: table::new(ctx),
-            owner: owner
+            owner: owner,
+            rewarder_address,
+            rewarder_percentage_fee,
         }
     }
 
@@ -622,6 +631,20 @@ module teleswap::cc_transfer_router_storage {
 
     public fun get_initialized(admin: &CC_TRANSFER_ADMIN): bool {
         admin.initialized
+    }
+
+    /// Returns the rewarder address
+    /// @param router The CC transfer router capability
+    /// @return Rewarder address
+    public fun get_rewarder_address(router: &CCTransferRouterCap): address {
+        router.rewarder_address
+    }
+
+    /// Returns the rewarder percentage fee
+    /// @param router The CC transfer router capability
+    /// @return Rewarder fee percentage (0-10000)
+    public fun get_rewarder_percentage_fee(router: &CCTransferRouterCap): u64 {
+        router.rewarder_percentage_fee
     }
 
     /// Creates a new TxAndProof instance

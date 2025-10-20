@@ -5,7 +5,7 @@ import { getFullnodeUrl } from '@mysten/sui.js/client';
 import { getActiveKeypair } from '../../scripts/helper/sui.utils';
 
 export type MoveArgument = {
-    type: 'pure' | 'object' | 'objectRef' | 'sharedObjectRef';
+    type: 'pure' | 'object' | 'objectRef' | 'sharedObjectRef' | 'moveVec';
     value: any;
 };
 
@@ -66,6 +66,31 @@ export async function callMoveFunction(options: MoveCallOptions) {
             }
             else if (moveArg.type === 'sharedObjectRef') {
                 return tx.sharedObjectRef(moveArg.value);
+            }
+            else if (moveArg.type === 'moveVec') {
+                // Handle Move vector creation
+                let objects = moveArg.value.objects || moveArg.value;
+                
+                // Convert our custom object format to Sui transaction objects
+                const convertedObjects = objects.map((obj: any) => {
+                    if (typeof obj === 'object' && obj !== null && 'type' in obj) {
+                        if (obj.type === 'object') {
+                            return tx.object(obj.value);
+                        } else if (obj.type === 'objectRef') {
+                            return tx.objectRef({objectId: obj.value.objectId, version: obj.value.version, digest: obj.value.digest});
+                        } else if (obj.type === 'sharedObjectRef') {
+                            return tx.sharedObjectRef(obj.value);
+                        }
+                    }
+                    // If it's already a Sui transaction object or string, use it directly
+                    return obj;
+                });
+                
+                if (moveArg.value.type) {
+                    return tx.makeMoveVec({ objects: convertedObjects, type: moveArg.value.type });
+                } else {
+                    return tx.makeMoveVec({ objects: convertedObjects });
+                }
             }
         }
         // Handle raw values (treat as pure) or fallback

@@ -1,4 +1,4 @@
-#[allow(unused_use,unused_variable,unused_const,unused_mut_parameter,unused_field)]
+#[allow(unused_use,unused_variable,unused_const,unused_mut_parameter,unused_field,lint(self_transfer))]
 module teleswap::burn_router_locker_connector {
     use sui::table::{Self, Table};
     use teleswap::burn_router_storage::{Self, BurnRouter, BurnRequest, BURN_ROUTER_ADMIN};
@@ -64,7 +64,8 @@ module teleswap::burn_router_locker_connector {
 
     /// @notice Unwraps TeleBTC for cross-chain withdrawal (connector function)
     /// @param burn_router The BurnRouter object
-    /// @param amount_coin The TeleBTC coins to unwrap
+    /// @param amount_coins Vector of TeleBTC coins to unwrap
+    /// @param amount The amount to unwrap from the merged coins
     /// @param user_script The user's Bitcoin script hash
     /// @param script_type The user's script type
     /// @param locker_locking_script The locker's Bitcoin locking script
@@ -77,7 +78,8 @@ module teleswap::burn_router_locker_connector {
     /// @return The amount of BTC the user will receive
     public(package) fun unwrap(
         burn_router: &mut BurnRouter,
-        amount_coin: Coin<TELEBTC>,
+        mut amount_coins: vector<Coin<TELEBTC>>,
+        amount: u64,
         user_script: vector<u8>,
         script_type: u8,
         locker_locking_script: vector<u8>,
@@ -97,8 +99,39 @@ module teleswap::burn_router_locker_connector {
             EINVALID_BTCRELAY
         );
 
-        // Extract amount from coin
-        let amount = coin::value(&amount_coin);
+        // Merge all coins and calculate total amount in one loop
+        let mut total_amount = 0;
+        let mut merged_coin = coin::zero<TELEBTC>(ctx);
+        let mut i = 0;
+        while (i < vector::length(&amount_coins)) {
+            let coin_to_merge = vector::borrow(&amount_coins, i);
+            let coin_amount = coin::value(coin_to_merge);
+            total_amount = total_amount + coin_amount;
+            i = i + 1;
+        };
+
+        // Check if merged amount is sufficient
+        assert!(total_amount >= amount, ERROR_INSUFFICIENT_FUNDS);
+
+        // Merge all coins into one
+        while (vector::length(&amount_coins) > 0) {
+            let coin_to_merge = vector::pop_back(&mut amount_coins);
+            coin::join(&mut merged_coin, coin_to_merge);
+        };
+
+        // Split the specified amount for unwrapping
+        let amount_coin = coin::split(&mut merged_coin, amount, ctx);
+        
+        // Return the remaining coin to the user
+        if (coin::value(&merged_coin) > 0) {
+            transfer::public_transfer(merged_coin, tx_context::sender(ctx));
+        } else {
+            coin::destroy_zero(merged_coin);
+        };
+
+        // Consume the empty vector
+        vector::destroy_empty(amount_coins);
+
         let locker_target_address = lockerstorage::get_locker_target_address(locker_locking_script,locker_cap);
 
         

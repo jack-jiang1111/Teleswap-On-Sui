@@ -135,9 +135,14 @@ module teleswap::lockercore {
         
         
         // Unwrap TeleBTC for locker rescue script using helper function
+        let mut coins_vector = vector::empty<Coin<TELEBTC>>();
+        vector::push_back(&mut coins_vector, burn_coins);
+        let needed_amount = needed_telebtc as u64;
+        
         burn_router_locker_connector::unwrap(
             burn_router_cap,
-            burn_coins, 
+            coins_vector,
+            needed_amount,
             locker_rescue_script, 
             locker_script_type, 
             locker_locking_script, 

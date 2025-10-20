@@ -241,8 +241,10 @@ export async function LockerFactory(
     let PROTOCOL_PERCENTAGE_FEE = 5 // means 0.05%
     let LOCKER_PERCENTAGE_FEE = 10 // means 0.1%
     let SLASHER_PERCENTAGE_REWARD = 5 // means 0.05%
+    let REWARDER_PERCENTAGE_FEE = 3 // means 0.03%
     let BITCOIN_FEE = 49700 // estimation of Bitcoin transaction fee in Satoshi
     let TREASURY = "0x0000000000000000000000000000000000000000000000000000000000000002";
+    let REWARDER_ADDRESS = "0x0000000000000000000000000000000000000000000000000000000000000005";
     await new Promise(resolve => setTimeout(resolve, 1000));
     console.log('--------------------------------');
     console.log('Step 4: Initializing BurnRouter...');
@@ -262,6 +264,8 @@ export async function LockerFactory(
             pure(BITCOIN_FEE),
             pure(deployer.toSuiAddress()),
             pure(btcrelayCapId),
+            pure(REWARDER_ADDRESS),
+            pure(REWARDER_PERCENTAGE_FEE),
         ],
         signer: deployer
     });

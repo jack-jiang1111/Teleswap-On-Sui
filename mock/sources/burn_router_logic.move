@@ -108,6 +108,8 @@ module teleswap::burn_router_logic {
         bitcoin_fee: u64,
         bitcoin_fee_oracle: address,
         btcrelay_object_id: ID,
+        rewarder_address: address,
+        rewarder_percentage_fee: u64,
         ctx: &mut TxContext
     ) {
         // Only allow initialization once, and set initialized in storage
@@ -123,6 +125,8 @@ module teleswap::burn_router_logic {
             treasury,
             bitcoin_fee_oracle,
             btcrelay_object_id,
+            rewarder_address,
+            rewarder_percentage_fee,
             ctx
         );
         transfer::public_share_object(burn_router);
@@ -131,7 +135,8 @@ module teleswap::burn_router_logic {
     /// @notice Records a user's burn request for cross-chain BTC withdrawal.
     /// @dev After submitting, the locker has a limited time to send BTC and provide proof.
     /// @param burn_router The BurnRouter object
-    /// @param amount_coin The Coin containing teleBTC to burn
+    /// @param amount_coins Vector of TeleBTC coins to unwrap
+    /// @param amount The amount to unwrap from the merged coins
     /// @param user_script The user's Bitcoin script hash
     /// @param script_type The users script type
     /// @param locker_locking_script The lockers Bitcoin locking script
@@ -144,7 +149,8 @@ module teleswap::burn_router_logic {
     /// @return The amount of BTC the user will receive
     public fun unwrap(
         burn_router: &mut BurnRouter,
-        amount_coin: Coin<TELEBTC>,
+        amount_coins: vector<Coin<TELEBTC>>,
+        amount: u64,
         user_script: vector<u8>,
         script_type: u8,
         locker_locking_script: vector<u8>,
@@ -158,7 +164,8 @@ module teleswap::burn_router_logic {
         // Call the connector function to avoid circular dependency
         burn_router_locker_connector::unwrap_mock(
             burn_router,
-            amount_coin,
+            amount_coins,
+            amount,
             user_script,
             script_type,
             locker_locking_script,

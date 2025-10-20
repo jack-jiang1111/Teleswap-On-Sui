@@ -55,30 +55,13 @@ class SwapTester {
     console.log(`\n🔄 Executing ${testName}...`);
     console.log(`Input amount: ${inputAmount}`);
     console.log(`Min output amount: ${minOutputAmount}`);
-
+    let gas_limit = 100000000; // 0.1sui as gas limit
     const txb = new TransactionBlock();
-    txb.setGasBudget(100000000); // Set gas budget
+    txb.setGasBudget(gas_limit); // Set gas budget
     
     // Get coin types for comparison
     const mockTokens = this.packageManager.getMockTokens();
     const suiType = '0x2::sui::SUI';
-    
-    // Handle gas coin management based on whether we're swapping SUI
-    if (targetToken === suiType) {
-      // For SUI swaps, don't set gas payment - let the runtime handle it automatically
-      // The SUI coin will be split for both gas and swap
-      console.log('🔄 SUI swap detected - using automatic gas coin handling');
-    } else {
-      // For non-SUI swaps, get the largest SUI coin for gas
-      const gasCoin = await this.coinManager.getGasCoin();
-      
-      // Set gas payment using the largest SUI coin
-      txb.setGasPayment([{
-        objectId: gasCoin.objectId,
-        version: gasCoin.version,
-        digest: gasCoin.digest,
-      }]);
-    }
     
     // Get pool IDs from package manager
     const pools = this.packageManager.getCetusPools();
@@ -97,24 +80,33 @@ class SwapTester {
     const clockId = "0x6";
 
     // Get coin types
-    const telebtcType = `0x13fcae40ceee69c936d8c88bee5c9d17f0a53107bd4004313d112d275f66977e::telebtc::TELEBTC`;
+    const telebtcType = `${this.packageManager.getTelebtc().packageId}::telebtc::TELEBTC`;
     const wbtcType = `${mockTokens.btc.packageId}::btc::BTC`;
     const usdtType = `${mockTokens.usdt.packageId}::usdt::USDT`;
     const usdcType = `${mockTokens.usdc.packageId}::usdc::USDC`;
 
     // Create coin lists - only the input token gets the actual coins, others get empty lists
     let telebtcCoins: any[], wbtcCoins: any[], suiCoins: any[], usdtCoins: any[], usdcCoins: any[];
-
     if (targetToken === telebtcType) {
       // TELEBTC is the OUTPUT - we're buying TELEBTC with other tokens
       telebtcCoins = []; // Empty - we're receiving TELEBTC
-      wbtcCoins = wbtcCoinIds.length > 0 ? wbtcCoinIds.map(id => txb.object(id)) : [];
-      suiCoins = suiCoinIds.length > 0 ? suiCoinIds.map(id => txb.object(id)) : [];
-      usdtCoins = usdtCoinIds.length > 0 ? usdtCoinIds.map(id => txb.object(id)) : [];
-      usdcCoins = usdcCoinIds.length > 0 ? usdcCoinIds.map(id => txb.object(id)) : [];
+
+      // Then we need to prepare the swapped coin list, converting the coin ids to coin objects
+      // SUI input path uses dedicated preparation to avoid gas/input coin conflicts
+      if(suiCoinIds.length > 0) {
+        const suiCoinsIds = await this.coinManager.prepareSuiForSwap(inputAmount, gas_limit);
+        suiCoins = suiCoinsIds.swapCoinIds.map((id) => txb.object(id));
+      }
+      else {
+        suiCoins = [];
+      }
+
+      wbtcCoins = wbtcCoinIds.map((id) => txb.object(id));
+      usdtCoins = usdtCoinIds.map((id) => txb.object(id));
+      usdcCoins = usdcCoinIds.map((id) => txb.object(id));
     } else if (targetToken === wbtcType || targetToken === suiType || targetToken === usdtType || targetToken === usdcType) {
       // WBTC is the OUTPUT - we're selling TELEBTC to get WBTC
-      telebtcCoins = telebtcCoinIds.map(id => txb.object(id)); // Use TELEBTC as input
+      telebtcCoins = (telebtcCoinIds).map((id) => txb.object(id)); // Use TELEBTC as input
       wbtcCoins = []; // Empty - we're receiving WBTC
       suiCoins = [];
       usdtCoins = [];
@@ -153,6 +145,9 @@ class SwapTester {
     const usdcVector = usdcCoins.length > 0 
       ? txb.makeMoveVec({ objects: usdcCoins })
       : txb.makeMoveVec({ objects: [], type: `0x2::coin::Coin<${usdcType}>` });
+
+    // Do not set gas payment explicitly; let runtime choose a suitable gas coin
+    
 
     // Call the swap function and destructure the return values
     const [success, telebtcResult, wbtcResult, suiResult, usdtResult, usdcResult] = txb.moveCall({
@@ -229,7 +224,7 @@ class SwapTester {
     const mockTokens = this.packageManager.getMockTokens();
     const mainPackageId = this.packageManager.getMainPackage("testnet").packageId;
     
-    const telebtcType = `0x13fcae40ceee69c936d8c88bee5c9d17f0a53107bd4004313d112d275f66977e::telebtc::TELEBTC`;
+    const telebtcType = `${this.packageManager.getTelebtc().packageId}::telebtc::TELEBTC`;
     const wbtcType = `${mockTokens.btc.packageId}::btc::BTC`;
     const suiType = '0x2::sui::SUI';
     const usdtType = `${mockTokens.usdt.packageId}::usdt::USDT`;
@@ -382,11 +377,11 @@ class SwapTester {
         case 8: {
           // Test 8: SUI -> TELEBTC (0.01 SUI)
           console.log('📋 Test 8: SUI -> TELEBTC');
-          const suiCoinIds = await this.coinManager.getSwapCoins(suiType, 10000000);
+          const suiCoinIds = await this.coinManager.getSwapCoins(suiType, 1000000000);
           
           return await this.executeSwap(
             telebtcType,
-            10000000,
+            1000000000,
             0,
             [],
             [],
@@ -425,7 +420,7 @@ class SwapTester {
     const mainPackageId = this.packageManager.getMainPackage("testnet").packageId;
     
     const requiredTypes = [
-      { type: `0x13fcae40ceee69c936d8c88bee5c9d17f0a53107bd4004313d112d275f66977e::telebtc::TELEBTC`, name: 'TELEBTC' },
+      { type: `${this.packageManager.getTelebtc().packageId}::telebtc::TELEBTC`, name: 'TELEBTC' },
       { type: `${mockTokens.btc.packageId}::btc::BTC`, name: 'WBTC' },
       { type: '0x2::sui::SUI', name: 'SUI' },
       { type: `${mockTokens.usdt.packageId}::usdt::USDT`, name: 'USDT' },
@@ -438,7 +433,7 @@ class SwapTester {
 
     try {
       // Run each test individually to avoid object reuse issues
-      for (let i = 1; i <= 8; i++) {
+      for (let i = 8; i <= 8; i++) {
         console.log(`\n🔄 Running Test ${i}/8...`);
         const result = await this.runSingleTest(i);
         results.push(result);

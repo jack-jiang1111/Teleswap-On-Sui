@@ -100,7 +100,7 @@ module teleswap::btcrelay {
     }
 
     /// Public entry to set lastSubmittedHeight for testing
-    public entry fun set_last_submitted_height(relay: &mut BTCRelay, value: u64) {
+    public fun set_last_submitted_height(relay: &mut BTCRelay, value: u64) {
         relay.lastSubmittedHeight = value;
     }
     
@@ -122,7 +122,7 @@ module teleswap::btcrelay {
     /// @param height Initial block height
     /// @param period_start_hash Start of difficulty period in hex format (little-endian) (hash value of the start of the period)
     /// @param finalization_parameter Number of blocks required for finalization
-    public entry fun initialize(
+    public fun initialize(
         genesis_header_hex: vector<u8>,
         height: u64,
         period_start_hash: vector<u8>,

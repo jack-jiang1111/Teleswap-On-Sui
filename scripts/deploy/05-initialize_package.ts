@@ -47,6 +47,10 @@ async function main() {
   const SLASHER_PERCENTAGE_REWARD = 100; // adjust if needed
   const BITCOIN_FEE = 100; // adjust if needed
 
+  // Rewarder configuration
+  const REWARDER_ADDRESS = activeAddress; // Use deployer as rewarder address
+  const REWARDER_PERCENTAGE_FEE = 5; // 0.05% in basis points
+
   // Addresses from tests: TELEPORTER_ADDRESS, TREASURY, bitcoin_fee_oracle use deployer by default
   const TELEPORTER_ADDRESS = activeAddress;
   const TREASURY = activeAddress;
@@ -59,7 +63,7 @@ async function main() {
   // Initialize CC Transfer Router
   {
     const tx = new TransactionBlock();
-    tx.setGasBudget(500000000);
+    tx.setGasBudget(100000000);
     tx.moveCall({
       target: `${packageId}::cc_transfer_router_logic::initialize`,
       arguments: [
@@ -70,6 +74,8 @@ async function main() {
         tx.pure(TREASURY),
         tx.pure(LOCKER_PERCENTAGE_FEE),
         tx.pure(btcrelayIdForInputs), // ID
+        tx.pure(REWARDER_ADDRESS),
+        tx.pure(REWARDER_PERCENTAGE_FEE),
         tx.object(ccTransferAdminId),
       ],
     });
@@ -100,7 +106,7 @@ async function main() {
   // Initialize Burn Router
   {
     const tx = new TransactionBlock();
-    tx.setGasBudget(500000000);
+    tx.setGasBudget(100000000);
     tx.moveCall({
       target: `${packageId}::burn_router_logic::initialize`,
       arguments: [
@@ -114,6 +120,8 @@ async function main() {
         tx.pure(BITCOIN_FEE),
         tx.pure(BITCOIN_FEE_ORACLE),
         tx.pure(btcrelayIdForInputs), // ID
+        tx.pure(REWARDER_ADDRESS),
+        tx.pure(REWARDER_PERCENTAGE_FEE),
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });
@@ -141,7 +149,7 @@ async function main() {
   // Initialize Locker
   {
     const tx = new TransactionBlock();
-    tx.setGasBudget(500000000);
+    tx.setGasBudget(100000000);
     const inactivationDelay = 20;
     const collateralRatio = 20000;
     const penaltyRatio = 15000;
@@ -183,7 +191,7 @@ async function main() {
     const exchangeAdminId = adminCaps.exchangeAdminId;
     if (!exchangeAdminId) throw new Error('exchangeAdminId missing in package_id.json');
     const tx = new TransactionBlock();
-    tx.setGasBudget(500000000);
+    tx.setGasBudget(100000000);
     const LOCKERS_ADDRESS = activeAddress; // reserved param; using deployer
     const THIRD_PARTY_ID = 1;
     const THIRD_PARTY_FEE = 0; // bps
@@ -205,6 +213,8 @@ async function main() {
         tx.pure(THIRD_PARTY_ADDRESS),
         tx.pure(REWARD_DISTRIBUTOR),
         tx.pure(SPECIAL_TELEPORTER),
+        tx.pure(REWARDER_ADDRESS),
+        tx.pure(REWARDER_PERCENTAGE_FEE),
       ],
     });
     const res = await client.signAndExecuteTransactionBlock({ transactionBlock: tx, signer: keypair, options: { showEffects: true } });

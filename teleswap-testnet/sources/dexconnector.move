@@ -1,4 +1,4 @@
-#[allow(unused)]
+#[allow(unused,deprecated_usage)]
 module teleswap::dexconnector {
     use sui::coin::{Self, Coin, TreasuryCap};
     use sui::event;
@@ -30,17 +30,12 @@ module teleswap::dexconnector {
     const ENOT_ENOUGH_COINS: u64 = 431;
     const EINVALID_TARGET_TOKEN: u64 = 432;
     const EINVALID_INPUT_LIST_LENGTH: u64 = 433;
-    // Events
 
+    // Constants
+    const MAX_SQRT_PRICE_X64: u128 = 79226673515401279992447579055;
+    const MIN_SQRT_PRICE_X64: u128 = 4295048016;
+    
 
-    // debug events
-    public struct DebugEvent has copy, drop {
-        value1: u64,
-        value2: u64,
-        value3: u64,
-        value4: u64,
-        value5: u64,
-    }
     /// Emitted when a swap completes successfully.
     /// - user: transaction sender
     /// - input_token/output_token: type names of tokens
@@ -152,7 +147,8 @@ module teleswap::dexconnector {
             input_amount,
         );
         let out = pool::calculated_swap_result_amount_out(&res);
-        if (out < min_output_amount) { return (false, out) };
+        let exceeded = pool::calculated_swap_result_is_exceed(&res); // if the swap exceed the pool boundary
+        if (out < min_output_amount || exceeded) { return (false, out) };
         (true, out)
     }
 
@@ -184,18 +180,23 @@ module teleswap::dexconnector {
         if (is_same<TargetToken, USDC>()) {
             // Two-hop swap: TELEBTC -> WBTC -> USDC
             let (status1, out1) = getOutputAmount<TELEBTC, BTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
             return getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, min_output_amount, false);
         };
         if (is_same<TargetToken, SUI>()) {
             // Three-hop swap: TELEBTC -> WBTC -> USDC -> SUI
             let (status1, out1) = getOutputAmount<TELEBTC, BTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<USDC, SUI>(pool_usdc_sui, out2, min_output_amount, true);
         };
         if (is_same<TargetToken, USDT>()) {
             // Three-hop swap: TELEBTC -> WBTC -> USDC -> USDT
             let (status1, out1) = getOutputAmount<TELEBTC, BTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<USDC, USDT>(pool_usdc_usdt, out2, min_output_amount, true);
         };
         (false, 0)
@@ -229,18 +230,23 @@ module teleswap::dexconnector {
         if (is_same<InputToken, USDC>()) {
             // Two-hop swap: USDC -> WBTC -> TELEBTC
             let (status1, out1) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
             return getOutputAmount<TELEBTC, BTC>(pool_telebtc_wbtc, out1, min_output_amount, false);
         };
         if (is_same<InputToken, SUI>()) {
             // Three-hop swap: SUI -> USDC -> WBTC -> TELEBTC
             let (status1, out1) = getOutputAmount<USDC, SUI>(pool_usdc_sui, input_amount, 0, false);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, true);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<TELEBTC, BTC>(pool_telebtc_wbtc, out2, min_output_amount, false);
         };
         if (is_same<InputToken, USDT>()) {
             // Three-hop swap: USDT -> USDC -> WBTC -> TELEBTC
             let (status1, out1) = getOutputAmount<USDC, USDT>(pool_usdc_usdt, input_amount, 0, false);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<TELEBTC, BTC>(pool_telebtc_wbtc, out2, min_output_amount, false);
         };
         (false, 0)
@@ -270,9 +276,7 @@ module teleswap::dexconnector {
     ):(Coin<CoinTypeA>, Coin<CoinTypeB>) {
         let amount = if (a2b) coin::value(&coin_a) else coin::value(&coin_b);
         // Set appropriate sqrt_price_limit based on swap direction
-        // For a2b=true: limit should be less than current price (allow price to decrease)
-        // For a2b=false: limit should be greater than current price (allow price to increase)
-        let sqrt_price_limit = if (a2b) 1 else 0xffffffffffffffffffffffffffffffffu128;
+        let sqrt_price_limit = if (a2b) MIN_SQRT_PRICE_X64 else MAX_SQRT_PRICE_X64; // use cetus default limit, since we have check output amount slippage at the end of the main swap
         let (receive_a, receive_b, flash_receipt) = pool::flash_swap<CoinTypeA, CoinTypeB>(
             config,
             pool,
@@ -437,8 +441,8 @@ module teleswap::dexconnector {
             }
             else if(coin::value(&usdc_coin) > 0) {
                 // Two-hop swap: USDC -> WBTC -> TELEBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, wbtc_coin, true, clock, ctx);
+                let (return_telebtc_coin,return_wbtc_coin) = swap<TELEBTC,BTC>(config, pool_telebtc_wbtc, telebtc_coin, return_wbtc_coin, false, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
@@ -460,10 +464,9 @@ module teleswap::dexconnector {
             }
             else if(coin::value(&sui_coin) > 0) {
                 // Three-hop swap: SUI -> USDC -> WBTC -> TELEBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_coin, true, clock, ctx);
-                
+                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, usdc_coin, sui_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, return_usdc_coin, wbtc_coin, true, clock, ctx);
+                let (return_telebtc_coin,return_wbtc_coin) = swap<TELEBTC,BTC>(config, pool_telebtc_wbtc, telebtc_coin, return_wbtc_coin, false, clock, ctx);
                 // Emit success event
                 event::emit(SwapExecuted {
                     user,
@@ -484,10 +487,9 @@ module teleswap::dexconnector {
             }
             else if(coin::value(&usdt_coin) > 0) {
                 // Three-hop swap: USDT -> USDC -> WBTC -> TELEBTC
-                let (return_telebtc_coin, return_wbtc_coin) = swap<TELEBTC, BTC>(config, pool_telebtc_wbtc, telebtc_coin, wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_coin, true, clock, ctx);
-                
+                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, usdc_coin, usdt_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, return_usdc_coin, wbtc_coin, true, clock, ctx);
+                let (return_telebtc_coin,return_wbtc_coin) = swap<TELEBTC,BTC>(config, pool_telebtc_wbtc, telebtc_coin, return_wbtc_coin, false, clock, ctx);
                 // Emit success event
                 event::emit(SwapExecuted {
                     user,
@@ -541,13 +543,7 @@ module teleswap::dexconnector {
             let usdt_amount = coin::value(&usdt_coin);
             let usdc_amount = coin::value(&usdc_coin);
 
-            event::emit(DebugEvent {
-                value1: telebtc_amount,
-                value2: wbtc_amount,
-                value3: sui_amount,
-                value4: usdt_amount,
-                value5: usdc_amount,
-            });
+
             assert!(telebtc_amount > 0, EINVALID_AMOUNT);
             assert!(wbtc_amount == 0, EINVALID_AMOUNT);
             assert!(sui_amount == 0, EINVALID_AMOUNT);
@@ -701,13 +697,17 @@ module teleswap::dexconnector {
         if (is_same<TargetToken, SUI>()) {
             // Three-hop swap: TELEBTC -> WBTC -> USDC -> SUI
             let (status1, out1) = getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<USDC, SUI>(pool_usdc_sui, out2, min_output_amount, true);
         };
         if (is_same<TargetToken, USDT>()) {
             // Three-hop swap: TELEBTC -> WBTC -> USDC -> USDT
             let (status1, out1) = getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<USDC, USDT>(pool_usdc_usdt, out2, min_output_amount, true);
         };
         (false, 10) //for testing only
@@ -741,18 +741,23 @@ module teleswap::dexconnector {
         if (is_same<InputToken, USDC>()) {
             // Two-hop swap: USDC -> WBTC -> TELEBTC
             let (status1, out1) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, input_amount, 0, true);
+            if (!status1) { return (false, 0) };
             return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, out1, min_output_amount, true);
         };
         if (is_same<InputToken, SUI>()) {
             // Three-hop swap: SUI -> USDC -> WBTC -> TELEBTC
             let (status1, out1) = getOutputAmount<USDC, SUI>(pool_usdc_sui, input_amount, 0, false);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, true);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, out2, min_output_amount, true);
         };
         if (is_same<InputToken, USDT>()) {
             // Three-hop swap: USDT -> USDC -> WBTC -> TELEBTC
             let (status1, out1) = getOutputAmount<USDC, USDT>(pool_usdc_usdt, input_amount, 0, false);
+            if (!status1) { return (false, 0) };
             let (status2, out2) = getOutputAmount<USDC, BTC>(pool_usdc_wbtc, out1, 0, false);
+            if (!status2) { return (false, 0) };
             return getOutputAmount<BTC, TELEBTC>(pool_telebtc_wbtc, out2, min_output_amount, true);
         };
         (false, 0)
@@ -883,8 +888,9 @@ module teleswap::dexconnector {
             }
             else if(coin::value(&usdc_coin) > 0) {
                 // Two-hop swap: USDC -> WBTC -> TELEBTC
-                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, true, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, wbtc_coin, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, return_wbtc_coin, telebtc_coin, true, clock, ctx);
+                
                 
                 // Emit success event
                 event::emit(SwapExecuted {
@@ -906,9 +912,10 @@ module teleswap::dexconnector {
             }
             else if(coin::value(&sui_coin) > 0) {
                 // Three-hop swap: SUI -> USDC -> WBTC -> TELEBTC
-                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, true, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, return_usdc_coin, sui_coin, true, clock, ctx);
+
+                let (return_usdc_coin,return_sui_coin) = swap<USDC,SUI>(config, pool_usdc_sui, usdc_coin, sui_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, return_usdc_coin, wbtc_coin, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, return_wbtc_coin, telebtc_coin, true, clock, ctx);
                 
                 // Emit success event
                 event::emit(SwapExecuted {
@@ -930,10 +937,9 @@ module teleswap::dexconnector {
             }
             else if(coin::value(&usdt_coin) > 0) {
                 // Three-hop swap: USDT -> USDC -> WBTC -> TELEBTC
-                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, wbtc_coin, telebtc_coin, true, clock, ctx);
-                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, usdc_coin, return_wbtc_coin, false, clock, ctx);
-                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, return_usdc_coin, usdt_coin, true, clock, ctx);
-                
+                let (return_usdc_coin,return_usdt_coin) = swap<USDC,USDT>(config, pool_usdc_usdt, usdc_coin, usdt_coin, false, clock, ctx);
+                let (return_usdc_coin,return_wbtc_coin) = swap<USDC, BTC>(config, pool_usdc_wbtc, return_usdc_coin, wbtc_coin, true, clock, ctx);
+                let (return_wbtc_coin,return_telebtc_coin) = swap<BTC, TELEBTC>(config, pool_telebtc_wbtc, return_wbtc_coin, telebtc_coin, true, clock, ctx);
                 // Emit success event
                 event::emit(SwapExecuted {
                     user,

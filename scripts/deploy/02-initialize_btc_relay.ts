@@ -5,6 +5,7 @@ import * as path from 'path';
 import { getNetwork } from '../helper/config';
 import { getActiveKeypair } from '../helper/sui.utils';
 import { PackageManager } from '../helper/package_manager';
+import { revertBytes32 } from '../../tests/utils/utils';
 
 async function main() {
     // Get network from command line args or use default
@@ -25,17 +26,21 @@ async function main() {
     console.log('Using package ID:', packageId);
 
     // Parameters for initialization
-    // TODO: Replace these with actual values
+    // TODO: Replace these with updated values
+
+    // 897110 header hex
     const genesis_header_hex = "00e05b2315d5244defc05310f45733be5d52dee66f0c0bb19f4802000000000000000000727e95f88f38dc43a55a2a24fa8697c6e682fcd22149b61ff3e958d0d22e90c3568c2868ed5c02179dcd6b73"; 
     const height = 897110; 
-    // 806400 hash in little endian
-    const period_start_hex = "5559430ef0abdfd1a35fc800b39ea8de6aba033246ef10000000000000000000";  
+    // 895104 hash in little endian
+    const period_start_hash_hex_big_endian = "00000000000000000001fe642330aba6ed8ae93b008cf53a1dfdba0fe0349555";
+    const period_start_hash_hex_little_endian = revertBytes32(period_start_hash_hex_big_endian);
+    //const period_start_hash_hex_little_endian = "5559430ef0abdfd1a35fc800b39ea8de6aba033246ef10000000000000000000"; 
     const finalization_parameter = 3; // Default value
 
     console.log('Initializing BTC relay with parameters:');
     console.log('Genesis header:', genesis_header_hex);
     console.log('Height:', height);
-    console.log('Period start:', period_start_hex);
+    console.log('Period start:', period_start_hash_hex_little_endian);
     console.log('Finalization parameter:', finalization_parameter);
 
     // Get gas coins
@@ -66,7 +71,7 @@ async function main() {
         arguments: [
             tx.pure(genesis_header_hex),
             tx.pure(height),
-            tx.pure(period_start_hex),
+            tx.pure(period_start_hash_hex_little_endian),
             tx.pure(finalization_parameter),
             tx.object(btcrelay.adminId), // Pass the relayAdmin object
         ]

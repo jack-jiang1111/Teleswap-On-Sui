@@ -305,13 +305,100 @@ function createRequest(
 }
 
 /**
- * Create a complete Bitcoin transaction JSON with the given transfer request parameters
- * @param name - Name for the transaction (e.g., "normalCCTransfer")
+ * Create a 58-byte hex value from exchange request components
+ * @param appId - Application ID (1 byte)
+ * @param recipientAddress - Recipient Sui address (32 bytes)
+ * @param networkFee - Network fee (4 bytes)
+ * @param speed - Speed setting (1 byte)
+ * @param thirdParty - Third party ID (1 byte)
+ * @param exchangeToken - Exchange token type (1 byte): 0=WBTC, 1=USDC, 2=USDT, 3=SUI
+ * @param outputAmount - Output amount (14 bytes)
+ * @param bridgeFee - Bridge fee (4 bytes, defaults to 0)
+ * @returns 58-byte hex string
+ */
+function createSwapRequest(
+    appId: number,
+    recipientAddress: string,
+    networkFee: number,
+    speed: number,
+    thirdParty: number,
+    exchangeToken: number,
+    outputAmount: number,
+    bridgeFee: number = 0
+): string {
+    // Validate inputs
+    if (appId < 0 || appId > 255) {
+        throw new Error('appId must be between 0 and 255');
+    }
+    if (networkFee < 0 || networkFee > 0xFFFFFFFF) {
+        throw new Error('networkFee must be between 0 and 4294967295');
+    }
+    if (speed < 0 || speed > 1) {
+        // throw new Error('speed must be 0 or 1');
+    }
+    if (thirdParty < 0 || thirdParty > 255) {
+        throw new Error('thirdParty must be between 0 and 255');
+    }
+    if (exchangeToken < 0 || exchangeToken > 3) {
+        throw new Error('exchangeToken must be between 0 and 3 (0=WBTC, 1=USDC, 2=USDT, 3=SUI)');
+    }
+    if (outputAmount < 0 || outputAmount > 0x3FFFFFFFFFFFFF) { // 14 bytes max
+        throw new Error('outputAmount must be between 0 and 281474976710655');
+    }
+    if (bridgeFee < 0 || bridgeFee > 0xFFFFFFFF) {
+        throw new Error('bridgeFee must be between 0 and 4294967295');
+    }
+    
+    // Create 58-byte array
+    const bytes = new Uint8Array(58);
+    
+    // Set appId (1 byte)
+    bytes[0] = appId;
+    
+    // Set recipientAddress (32 bytes)
+    const addressBytes = fromSuiAddress(recipientAddress);
+    if (addressBytes.length !== 32) {
+        throw new Error('recipientAddress must be 32 bytes');
+    }
+    bytes.set(addressBytes, 1);
+    
+    // Set networkFee (4 bytes, big-endian)
+    const feeBytes = numberToBytes(networkFee, 4);
+    bytes.set(feeBytes, 33);
+    
+    // Set speed (1 byte)
+    bytes[37] = speed;
+    
+    // Set thirdParty (1 byte)
+    bytes[38] = thirdParty;
+    
+    // Set exchangeToken (1 byte)
+    bytes[39] = exchangeToken;
+    
+    // Set outputAmount (14 bytes, big-endian)
+    const outputBytes = numberToBytes(outputAmount, 14);
+    bytes.set(outputBytes, 40);
+    
+    // Set bridgeFee (4 bytes, big-endian)
+    const bridgeFeeBytes = numberToBytes(bridgeFee, 4);
+    bytes.set(bridgeFeeBytes, 54);
+    
+    return toHex(bytes);
+}
+
+/**
+ * Create a complete Bitcoin transaction JSON with the given transfer or swap request parameters
+ * @param name - Name for the transaction (e.g., "normalCCTransfer" or "swapRequest")
  * @param appId - Application ID (1 byte)
  * @param recipientAddress - Recipient Sui address (32 bytes)
  * @param networkFee or teleporterFee - Network fee (4 bytes)
  * @param speed - Speed setting (1 byte)
  * @param thirdParty - Third party ID (1 byte)
+ * @param swap - Whether to create a swap request (default: false)
+ * @param exchangeToken - Exchange token type (required if swap=true): 0=WBTC, 1=USDC, 2=USDT, 3=SUI
+ * @param outputAmount - Min Output amount (required if swap=true)
+ * @param bridgeFee - Bridge fee (optional, defaults to 0)
+ * @param noValue - Whether to create transaction with no value (default: false)
  * @returns JSON string representing the complete Bitcoin transaction
  */
 function createBitcoinTransactionJson(
@@ -321,17 +408,36 @@ function createBitcoinTransactionJson(
     teleporterFee: number,
     speed: number,
     thirdParty: number,
-    noValue = false
+    swap: boolean = false,
+    exchangeToken?: number,
+    inputAmount?: number, // input btc amount
+    outputAmount?: number,
+    bridgeFee: number = 0,
+    noValue: boolean = false
 ): any {
-    // Create the 39-byte transfer request hex
-    const transferRequestHex = createRequest(appId, recipientAddress, teleporterFee, speed, thirdParty);
+    // Create the appropriate request hex based on swap parameter
+    let requestHex: string;
+    if (swap) {
+        // Validate required parameters for swap request
+        if (exchangeToken === undefined) {
+            throw new Error('exchangeToken is required when swap is true');
+        }
+        if (outputAmount === undefined) {
+            throw new Error('outputAmount is required when swap is true');
+        }
+        // Create the 58-byte swap request hex
+        requestHex = createSwapRequest(appId, recipientAddress, teleporterFee, speed, thirdParty, exchangeToken, outputAmount, bridgeFee);
+    } else {
+        // Create the 39-byte transfer request hex
+        requestHex = createRequest(appId, recipientAddress, teleporterFee, speed, thirdParty);
+    }
     
     // Create Bitcoin transaction components according to protocol
     const version = "0x02000000";
     const vin = "0x" + createBitcoinVin();
-    const bitcoinAmount = noValue ? 0 : 10;
-    const vout = "0x" + createBitcoinVoutP2PKH(bitcoinAmount, transferRequestHex);
-    const opReturn = transferRequestHex;
+    const bitcoinAmount = noValue ? 0 : inputAmount || 10; // either input amount or 10
+    const vout = "0x" + createBitcoinVoutP2PKH(bitcoinAmount, requestHex);
+    const opReturn = requestHex;
     const locktime = "0x00000000";
     
     // Calculate transaction ID based on actual transaction data
@@ -545,4 +651,4 @@ function outputLength(output: number[]): number {
     return totalLength;
 }
 
-export { parseRequest, createRequest, createBitcoinTransactionJson, SimpleTransferRequest, BitcoinTransaction, tryAsVout, indexCompactInt, compactIntLength, outputLength, createBitcoinVout }; 
+export { parseRequest, createRequest, createSwapRequest, createBitcoinTransactionJson, SimpleTransferRequest, BitcoinTransaction, tryAsVout, indexCompactInt, compactIntLength, outputLength, createBitcoinVout }; 
