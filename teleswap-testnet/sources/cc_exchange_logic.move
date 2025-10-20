@@ -477,7 +477,7 @@ module teleswap::cc_exchange_logic {
 
         if(target_token == 0) {
             // WBTC
-            return dexconnector::mainSwapTokens_rev<BTC>(
+            return dexconnector::mainSwapTokens<BTC>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -495,7 +495,7 @@ module teleswap::cc_exchange_logic {
             );
         } else if(target_token == 1) {
             // USDC
-            return dexconnector::mainSwapTokens_rev<USDC>(
+            return dexconnector::mainSwapTokens<USDC>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -512,7 +512,7 @@ module teleswap::cc_exchange_logic {
                 ctx
             );
         } else if(target_token == 2) {
-            return dexconnector::mainSwapTokens_rev<USDT>(
+            return dexconnector::mainSwapTokens<USDT>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -529,7 +529,7 @@ module teleswap::cc_exchange_logic {
                 ctx
             );
         } else if(target_token == 3) {
-            return dexconnector::mainSwapTokens_rev<SUI>(
+            return dexconnector::mainSwapTokens<SUI>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -844,7 +844,10 @@ module teleswap::cc_exchange_logic {
         tx_id
     }
 
-    // used for telebtc-btc pair (package id generated is reverse)
+    // used for telebtc-btc pair
+    // Cetus generates the pair based on the ASCII value, so if the telebtc package is before wbtc, then we use this reverse
+    // If the pool is BTC-TELEBTC, use wrap and swap
+    // If the pool is TELEBTC-BTC, use wrap and swap_reverse
     public fun wrap_and_swap_reverse(
         storage: &mut ExchangeCap,
         config: &GlobalConfig,
@@ -932,6 +935,7 @@ module teleswap::cc_exchange_logic {
         true
     }
 
+    // revserse version of execute_wrap_and_swap
     fun execute_wrap_and_swap_reverse(
         storage: &mut ExchangeCap,
         config: &GlobalConfig,
@@ -1040,6 +1044,7 @@ module teleswap::cc_exchange_logic {
         }
     }
 
+    // reverse version of execute_swap
     fun execute_swap_reverse(
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
@@ -1074,7 +1079,7 @@ module teleswap::cc_exchange_logic {
 
         if(target_token == 0) {
             // WBTC
-            return dexconnector::mainSwapTokens<BTC>(
+            return dexconnector::mainSwapTokensReverse<BTC>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -1092,7 +1097,7 @@ module teleswap::cc_exchange_logic {
             );
         } else if(target_token == 1) {
             // USDC
-            return dexconnector::mainSwapTokens<USDC>(
+            return dexconnector::mainSwapTokensReverse<USDC>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -1109,7 +1114,7 @@ module teleswap::cc_exchange_logic {
                 ctx
             );
         } else if(target_token == 2) {
-            return dexconnector::mainSwapTokens<USDT>(
+            return dexconnector::mainSwapTokensReverse<USDT>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,
@@ -1126,7 +1131,7 @@ module teleswap::cc_exchange_logic {
                 ctx
             );
         } else if(target_token == 3) {
-            return dexconnector::mainSwapTokens<SUI>(
+            return dexconnector::mainSwapTokensReverse<SUI>(
                 config,
                 pool_usdc_sui,
                 pool_usdc_usdt,

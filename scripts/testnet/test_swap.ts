@@ -151,7 +151,7 @@ class SwapTester {
 
     // Call the swap function and destructure the return values
     const [success, telebtcResult, wbtcResult, suiResult, usdtResult, usdcResult] = txb.moveCall({
-      target: `${mainPackageId}::dexconnector::mainSwapTokens_rev`,
+      target: `${mainPackageId}::dexconnector::mainSwapTokens`,
       typeArguments: [`${targetToken}`],
       arguments: [
         configObj,

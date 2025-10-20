@@ -200,6 +200,6 @@ If use in the same tx, still won't work for using the same tx input
 
 current issue: 
 1. re test the burn test
-2. re format the reverse section
+2. re format the reverse section, need retest
 3. test_bitcoin,  create tx with no opreturn value, then test burn proof 
 ```

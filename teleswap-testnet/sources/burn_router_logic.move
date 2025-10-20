@@ -202,7 +202,7 @@ module teleswap::burn_router_logic {
     /// @param clock The Sui clock
     /// @param ctx The transaction context
     /// @return The amount of BTC the user will receive
-    public fun swap_and_unwrap(
+    public fun swap_and_unwrap_reverse(
         burn_router: &mut BurnRouter,
         amounts: vector<u64>,
         user_script: vector<u8>,
@@ -214,6 +214,90 @@ module teleswap::burn_router_logic {
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
         pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
+        wbtc_coins: vector<Coin<BTC>>,
+        sui_coins: vector<Coin<SUI>>,
+        usdt_coins: vector<Coin<USDT>>,
+        usdc_coins: vector<Coin<USDC>>,
+        telebtc_cap: &mut TeleBTCCap,
+        treasury_cap: &mut TreasuryCap<TELEBTC>,
+        btcrelay: &BTCRelay,
+        locker_cap: &mut LockerCap,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ): u64 {
+        // Exchange input token for teleBTC using the exchange helper
+        let telebtc_coin = exchange_helper_reverse(
+            config,
+            pool_usdc_sui,
+            pool_usdc_usdt,
+            pool_usdc_wbtc,
+            pool_telebtc_wbtc,
+            amounts[0], // input amount
+            amounts[1], // min output amount
+            wbtc_coins,
+            sui_coins,
+            usdt_coins,
+            usdc_coins,
+            clock,
+            ctx
+        );
+        // Call unwrap to burn the teleBTC and return the BTC amount
+        let mut coins_vector = vector::empty<Coin<TELEBTC>>();
+        vector::push_back(&mut coins_vector, telebtc_coin);
+        let telebtc_amount = coin::value(vector::borrow(&coins_vector, 0));
+        
+        unwrap(
+            burn_router, 
+            coins_vector,
+            telebtc_amount,
+            user_script, 
+            script_type, 
+            locker_locking_script, 
+            third_party, 
+            telebtc_cap, 
+            treasury_cap, 
+            btcrelay, 
+            locker_cap, 
+            ctx
+        )
+    }
+
+    /// @notice Exchanges input token for teleBTC, then burns it for cross-chain withdrawal.
+    /// @dev After exchanging, rest of the process is similar to unwrap.
+    /// @param burn_router The BurnRouter object
+    /// @param amounts [inputTokenAmount, minTeleBTCAmount]
+    /// @param user_script The user's Bitcoin script hash
+    /// @param script_type The users script type
+    /// @param locker_locking_script The lockers Bitcoin locking script
+    /// @param third_party The third party id
+    /// @param config Global configuration for Cetus CLMM
+    /// @param pool_usdc_sui Pool for USDC-SUI trading
+    /// @param pool_usdc_usdt Pool for USDC-USDT trading
+    /// @param pool_usdc_wbtc Pool for USDC-WBTC trading
+    /// @param pool_telebtc_wbtc Pool for TELEBTC-WBTC trading
+    /// @param wbtc_coin WBTC coin for swapping (only one of the tokens should be non-zero)
+    /// @param sui_coin SUI coin for swapping (only one of the tokens should be non-zero)
+    /// @param usdt_coin USDT coin for swapping (only one of the tokens should be non-zero)
+    /// @param usdc_coin USDC coin for swapping (only one of the tokens should be non-zero)
+    /// @param telebtc_cap The TeleBTC capability
+    /// @param treasury_cap The protocol treasury capability
+    /// @param btcrelay The BTCRelay object
+    /// @param locker_cap The dummy locker capability
+    /// @param clock The Sui clock
+    /// @param ctx The transaction context
+    /// @return The amount of BTC the user will receive
+    public fun swap_and_unwrap(
+        burn_router: &mut BurnRouter,
+        amounts: vector<u64>,
+        user_script: vector<u8>,
+        script_type: u8,
+        locker_locking_script: vector<u8>,
+        third_party: u64,
+        config: &GlobalConfig,
+        pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
+        pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<BTC, TELEBTC>,
         wbtc_coins: vector<Coin<BTC>>,
         sui_coins: vector<Coin<SUI>>,
         usdt_coins: vector<Coin<USDT>>,
@@ -562,7 +646,7 @@ module teleswap::burn_router_logic {
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
-        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<BTC, TELEBTC>,
         input_amount: u64,
         min_output_amount: u64,
         wbtc_coin: vector<Coin<BTC>>,
@@ -577,6 +661,58 @@ module teleswap::burn_router_logic {
         let telebtc_coins = vector::empty<Coin<TELEBTC>>();
         
         let (status,telebtc_coin,wbtc_coin,sui_coin,usdt_coin,usdc_coin) = dexconnector::mainSwapTokens<TELEBTC>(
+            config,
+            pool_usdc_sui,
+            pool_usdc_usdt,
+            pool_usdc_wbtc,
+            pool_telebtc_wbtc,
+            input_amount,
+            min_output_amount,
+            telebtc_coins,
+            wbtc_coin,
+            sui_coin,
+            usdt_coin,
+            usdc_coin,
+            clock,
+            ctx
+        );
+        // The return value from mainswap token should contain only teleBTC, with other tokens being zero
+        assert!(status, ESWAP_FAILED);
+        assert!(coin::value(&wbtc_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+        assert!(coin::value(&sui_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+        assert!(coin::value(&usdt_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+        assert!(coin::value(&usdc_coin) == 0, EINVALID_SWAP_RETURN_AMOUNT);
+        // destroy the zero-amount coins
+        coin::destroy_zero(wbtc_coin);
+        coin::destroy_zero(sui_coin);
+        coin::destroy_zero(usdt_coin);
+        coin::destroy_zero(usdc_coin);
+        // return the teleBTC coin
+        telebtc_coin
+    }
+
+    // this helper will swap the input token for teleBTC, and return the teleBTC coin
+    // reverse version of exchange_helper used for TELEBTC-BTC pair
+    fun exchange_helper_reverse(
+        config: &GlobalConfig,
+        pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
+        pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
+        pool_usdc_wbtc: &mut pool::Pool<USDC, BTC>,
+        pool_telebtc_wbtc: &mut pool::Pool<TELEBTC, BTC>,
+        input_amount: u64,
+        min_output_amount: u64,
+        wbtc_coin: vector<Coin<BTC>>,
+        sui_coin: vector<Coin<SUI>>,
+        usdt_coin: vector<Coin<USDT>>,
+        usdc_coin: vector<Coin<USDC>>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ): Coin<TELEBTC>
+    {
+        // Create a empty vector of teleBTC coin for the swap
+        let telebtc_coins = vector::empty<Coin<TELEBTC>>();
+        
+        let (status,telebtc_coin,wbtc_coin,sui_coin,usdt_coin,usdc_coin) = dexconnector::mainSwapTokensReverse<TELEBTC>(
             config,
             pool_usdc_sui,
             pool_usdc_usdt,

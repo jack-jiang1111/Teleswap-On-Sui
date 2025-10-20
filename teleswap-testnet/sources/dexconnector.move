@@ -165,7 +165,7 @@ module teleswap::dexconnector {
     /// - min_output_amount: Minimum acceptable output amount
     /// 
     /// Returns: (bool, u64) - (success_flag, output_amount)
-    public fun getQuoteSellTelebtc<TargetToken>(
+    public fun getQuoteSellTelebtcReverse<TargetToken>(
         pool_usdc_sui: &pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
@@ -215,7 +215,7 @@ module teleswap::dexconnector {
     /// - min_output_amount: Minimum acceptable TELEBTC amount
     /// 
     /// Returns: (bool, u64) - (success_flag, output_amount)
-    public fun getQuoteBuyTelebtc<InputToken>(
+    public fun getQuoteBuyTelebtcReverse<InputToken>(
         pool_usdc_sui: &pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
@@ -334,7 +334,7 @@ module teleswap::dexconnector {
     /// - ctx: Transaction context
     /// 
     /// Returns: (bool, Coin<TELEBTC>, Coin<WBTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) - Success flag and updated coins
-    public fun mainSwapTokens<TargetToken>(
+    public fun mainSwapTokensReverse<TargetToken>(
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
@@ -381,16 +381,16 @@ module teleswap::dexconnector {
             // Get quote for the swap
             let (status, quote_amount) = if (coin::value(&wbtc_coin) > 0) {
                 input_token_type = type_name::get<BTC>();
-                getQuoteBuyTelebtc<BTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtcReverse<BTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else if (coin::value(&sui_coin) > 0) {
                 input_token_type = type_name::get<SUI>();
-                getQuoteBuyTelebtc<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtcReverse<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else if (coin::value(&usdt_coin) > 0) {
                 input_token_type = type_name::get<USDT>();
-                getQuoteBuyTelebtc<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtcReverse<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else if (coin::value(&usdc_coin) > 0) {
                 input_token_type = type_name::get<USDC>();
-                getQuoteBuyTelebtc<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtcReverse<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else {
                 abort ENOT_ENOUGH_COINS;
                 (false, 0)
@@ -515,7 +515,7 @@ module teleswap::dexconnector {
         else{
             // Direction: TELEBTC -> Other tokens
             // Get quote for selling TELEBTC to get target token
-            let (status, amount) = getQuoteSellTelebtc<TargetToken>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount);
+            let (status, amount) = getQuoteSellTelebtcReverse<TargetToken>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount);
             if (!status) {
                 // Slippage issue, return the original coins and emit failure event
                 event::emit(SwapFailed {
@@ -661,7 +661,7 @@ module teleswap::dexconnector {
         return (false, merged_telebtc_coin, merged_wbtc_coin, merged_sui_coin, merged_usdt_coin, merged_usdc_coin)
     }
 
-    // The below code is for the reverse case (ascii telebtc is smaller than ascii btc), so the pool is <BTC,TELEBTC>
+    // The below code is for the (ascii telebtc is smaller than ascii btc), so the pool is <BTC,TELEBTC>
 
     /// Get quote for selling TELEBTC to target token
     /// This function calculates how much of the target token you can get for a given amount of TELEBTC
@@ -676,7 +676,7 @@ module teleswap::dexconnector {
     /// - min_output_amount: Minimum acceptable output amount
     /// 
     /// Returns: (bool, u64) - (success_flag, output_amount)
-    public fun getQuoteSellTelebtc_rev<TargetToken>(
+    public fun getQuoteSellTelebtc<TargetToken>(
         pool_usdc_sui: &pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
@@ -726,7 +726,7 @@ module teleswap::dexconnector {
     /// - min_output_amount: Minimum acceptable TELEBTC amount
     /// 
     /// Returns: (bool, u64) - (success_flag, output_amount)
-    public fun getQuoteBuyTelebtc_rev<InputToken>(
+    public fun getQuoteBuyTelebtc<InputToken>(
         pool_usdc_sui: &pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &pool::Pool<USDC, USDT>,
         pool_usdc_wbtc: &pool::Pool<USDC, BTC>,
@@ -785,7 +785,7 @@ module teleswap::dexconnector {
     /// - ctx: Transaction context
     /// 
     /// Returns: (bool, Coin<TELEBTC>, Coin<WBTC>, Coin<SUI>, Coin<USDT>, Coin<USDC>) - Success flag and updated coins
-    public fun mainSwapTokens_rev<TargetToken>(
+    public fun mainSwapTokens<TargetToken>(
         config: &GlobalConfig,
         pool_usdc_sui: &mut pool::Pool<USDC, SUI>,
         pool_usdc_usdt: &mut pool::Pool<USDC, USDT>,
@@ -829,16 +829,16 @@ module teleswap::dexconnector {
             let input_token_type: std::type_name::TypeName;
             let (status, quote_amount) = if (coin::value(&wbtc_coin) > 0) {
                 input_token_type = type_name::get<BTC>();
-                getQuoteBuyTelebtc_rev<BTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtc<BTC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else if (coin::value(&sui_coin) > 0) {
                 input_token_type = type_name::get<SUI>();
-                getQuoteBuyTelebtc_rev<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtc<SUI>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else if (coin::value(&usdt_coin) > 0) {
                 input_token_type = type_name::get<USDT>();
-                getQuoteBuyTelebtc_rev<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtc<USDT>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else if (coin::value(&usdc_coin) > 0) {
                 input_token_type = type_name::get<USDC>();
-                getQuoteBuyTelebtc_rev<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
+                getQuoteBuyTelebtc<USDC>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount)
             } else {
                 abort ENOT_ENOUGH_COINS;
                 (false, 0)
@@ -965,7 +965,7 @@ module teleswap::dexconnector {
         else{
             // Direction: TELEBTC -> Other tokens
             // Get quote for buying target token with TELEBTC
-            let (status, amount) = getQuoteSellTelebtc_rev<TargetToken>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount);
+            let (status, amount) = getQuoteSellTelebtc<TargetToken>(pool_usdc_sui, pool_usdc_usdt, pool_usdc_wbtc, pool_telebtc_wbtc, input_amount, min_output_amount);
             if (!status) {
                 // Slippage issue, return the original coins and emit failure event
                 event::emit(SwapFailed {
