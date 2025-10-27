@@ -23,7 +23,6 @@ TeleswapSui is a bridge protocol that:
 1. Clone the repository:
 ```bash
 git clone https://github.com/jack-jiang1111/teleswapSui.git
-cd teleswapSui
 ```
 
 2. Install dependencies:
@@ -33,6 +32,7 @@ npm install
 
 3. Build the project:
 ```bash
+cd teleswap-mainnet
 sui move build
 ```
 
@@ -72,6 +72,9 @@ sui client gas
 
 # Request gas from faucet if needed
 sui client faucet
+
+# Check all the enviornment
+sui client envs 
 ```
 
 7. Run tests:
@@ -97,9 +100,15 @@ npm test -- tests/burn.test.ts
 npm test -- tests/locker.test.ts
 ```
 
-8. Deploy the contract:
+8. Deploy the contract to testnet:
 before deploy the contract, need to fetch some test coin on faceut
 ```bash
+# Build the testnet project
+cd teleswap-testnet
+sui move build
+
+cd ..
+
 # Deploy the contract to mainnet/testnet/devnet, use --real_relay flag if use real btcrelay (otherise use mock btcrelay)
 npx ts-node scripts/deploy/01-deploy_btc_relay.ts [network]
 
@@ -132,74 +141,56 @@ npx ts-node scripts/testnet/test_wrapAndswap.ts
 npx ts-node scripts/testnet/test_unwrap.ts
 ```
 
+
+
+
+## Project Structure
+
+The project consists of three main versions:
+
+- **Localnet Mock Version**: Available only for local testing
+- **Testnet Version**: Uses mock WBTC/USDC/USDT and BTC relay, all other files remain the same as mainnet
+- **Mainnet Version**: Production-ready version
+
+### Directory Structure
+
+```
+├── btcrelaypackage/          # Contains the BTC relay package
+├── mock/                     # Localnet version of teleswap and mock coins
+├── scripts/
+│   ├── deploy/              # Deployment scripts
+│   ├── sdk/                 # SDK functions and update-relay.ts script
+│   └── testnet/             # Testnet-specific scripts
+├── tests/                   # Test scripts
+├── teleswap-mainnet/        # Code used on mainnet
+└── teleswap-testnet/        # Code used on testnet
+```
+## Additional Commands
+### Package Upgrade
+```bash
+sui client upgrade --gas-budget 750000000 --upgrade-capability "the upgrade object cap id"
+```
+### Local network restart (delete cache)
+```bash
+Remove-Item -Recurse -Force "$env:USERPROFILE\.sui\sui_config"
+$env:RUST_LOG="off,sui_node=info"; sui start --with-faucet
+```
+
+
+## Known Issues
+
+### Current Issue: SUI to TeleBTC Router Swapping
+
+**Problem**: Swapping from SUI to TeleBTC router has limitations:
+
+1. **Separate Transaction Approach**: 
+   - Issue: When user has only one coin and an empty coin, split operation won't work
+   
+2. **Same Transaction Approach**: 
+   - Issue: Still doesn't work when using the same transaction input
+
+**Status**: This issue is currently being investigated and resolved.
+
+
 ## License
 MIT
-
-
-## Some note about general design (diff from evm contract)
-1. Contracts will be upgraded using the upgrade Cap. The upgrade Cap will be assigned to deployer when deploying the contract
-2. Package id won't change when upgrading the contract (In Move, the address must be known at compile time for use statements. You cannot dynamically import a module at runtime.)
-3. The bridge/locker/burner/exchange/telebtc contracts will depend on each other by "use module"
-
-
-## SDK Function Status
-
-### ✅ Completed Functions
-
-
-
-#### Quote Functions
-- [x] `getQuote()` - Get quote for TELEBTC trading (returns [boolean, number])
-
-#### Burn Router Functions
-- [ ] `unwrap()` - Unwrap tokens from wrapped state
-- [ ] `swapAndUnwrap()` - Swap and unwrap tokens
-- [ ] `burnProof()` - Burn proof verification and token minting
-
-#### CC Exchange Functions
-- [x] `wrapAndSwap()` - Wrap tokens and perform swap
-- [x] `refundByAdmin()` - Refund by admin (admin only function)
-
-#### CC Transfer Router Functions
-- [x] `wrap()` - Wrap (cc_transfer) with TxAndProof construction
-- [x] `requestToBecomeLocker()` - Request to become a locker
-- [x] `addLocker()` - Add locker (admin function)
-
-#### BTC Relay Functions
-- [x] `addHeadersWithRetarget()` - Check scripts/sdk/update-relay.ts for usage
-- [x] `addHeaders()` - Check scripts/sdk/update-relay.ts for usage
-
-
-
-## Other TODOs
-```
--- Three version of the projects
--- localnet mock version: only available to local test
--- test version: besides from wbtc/usdc/usdc and btcrelay, all other files remain the same as mainnet
--- mainnet version: ready to ship version
-```
-## TODO:
-```
-7. security
-  - safe math rescan all files
-  - reentrancy issue rescan
-8. gas improvement
-
-WBTC MAINNET: 0xaafb102dd0902f5055cadecd687fb5b71ca82ef0e0285d90afde828ec58ca96b::btc::BTC
-(A,B) order matter since the cetus decide the (a>b)
-
-we add another version in dexconnector, testing it first
-GLOBAL CONFIG IN TESTNET: 0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e
-
-upgrade the package via cli: sui client upgrade --gas-budget 750000000 --upgrade-capability 0xdead90b38cd97b0afdadb005543d67fa82930c50d31149fc8f60ddc3df72833c
-run the swap test: ts-node .\scripts\testnet\test_swap_clean.ts
-
-The current issue: swapping from sui to telebtc router.
-If use split in seperate tx, odd case when user only has one coin, and a empty coin, split won't work
-If use in the same tx, still won't work for using the same tx input
-
-current issue: 
-1. re test the burn test
-2. re format the reverse section, need retest
-3. test_bitcoin,  create tx with no opreturn value, then test burn proof 
-```

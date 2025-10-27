@@ -114,44 +114,41 @@ function createBitcoinVout(bitcoinAmount: number, opReturn: string): string {
     return vout;
 }
 
-// Helper function to create Bitcoin vout with P2PKH script type for main output
-function createBitcoinVoutP2PKH(bitcoinAmount: number, opReturn: string): string {
-    // Convert BTC to satoshis (1 BTC = 100,000,000 satoshis)
-    const satoshis = bitcoinAmount * 100000000;
-    
-    // Create the vout structure according to Bitcoin protocol
+function createBitcoinVoutP2PKH(bitcoinAmount: number,
+     opReturn: string,
+     pubKeyHashMain: string, // the main bitcoin sent to 
+     pubKeyHashRest: string, // 10% bitcoin sent to
+      includeOpReturn: boolean = true): string {
+    const satoshis = Math.round(bitcoinAmount * 1e8);
     let vout = '';
-    
-    // 1. Number of outputs (VarInt)
-    vout += createCompactInt(3); // 3 outputs: main output, OP_RETURN, change
-    
-    // 2. First output: Main payment (P2PKH format)
-    // Convert to little-endian
-    const satoshisHex = satoshis.toString(16).padStart(16, '0');
-    const bytes = satoshisHex.match(/.{2}/g) || [];
-    const littleEndianHex = bytes.reverse().join('');
-    const mainAmountHex = littleEndianHex;
-    
-    // P2PKH script: OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
-    // 1976a914<pubKeyHash>88ac
-    const mainScript = '1976a914' + '4062c8aeed4f81c2d73ff854a2957021191e20b6' + '88ac';
-    const mainScriptLength = createCompactInt(mainScript.length / 2); // 25 bytes
+
+    // Determine output count
+    const outputCount = includeOpReturn ? 3 : 2;
+    vout += createCompactInt(outputCount);
+
+    // --- 1. Main P2PKH output ---
+    const mainAmountHex = satoshis.toString(16).padStart(16, '0').match(/.{2}/g)!.reverse().join('');
+    const mainScript = '76a914' + pubKeyHashMain + '88ac';  // <---- FIXED: remove '19' prefix
+    const mainScriptLength = createCompactInt(mainScript.length / 2);
     vout += mainAmountHex + mainScriptLength + mainScript;
-    
-    // 3. Second output: OP_RETURN with our data
-    const opReturnScript = '6a' + createCompactInt(opReturn.length / 2) + opReturn; // OP_RETURN + length + data
-    const opReturnScriptLength = createCompactInt(opReturnScript.length / 2);
-    vout += '0000000000000000' + opReturnScriptLength + opReturnScript; // 0 satoshis for OP_RETURN
-    
-    // 4. Third output: Change output (P2PKH format)
-    const changeAmount = Math.floor(satoshis * 0.1); // 10% change
-    const changeAmountHex = changeAmount.toString(16).padStart(16, '0');
-    const changeScript = '1976a914' + '12ab8dc588ca9d5787dde7eb29569da63c3a238c' + '88ac'; // P2PKH script, exact rescue script from test
+
+    // --- 2. Optional OP_RETURN output ---
+    if (includeOpReturn) {
+        const opReturnScript = '6a' + createCompactInt(opReturn.length / 2) + opReturn;
+        const opReturnScriptLength = createCompactInt(opReturnScript.length / 2);
+        vout += '0000000000000000' + opReturnScriptLength + opReturnScript;
+    }
+
+    // --- 3. Change P2PKH output ---
+    const changeAmount = Math.floor(satoshis * 0.1);
+    const changeAmountHex = changeAmount.toString(16).padStart(16, '0').match(/.{2}/g)!.reverse().join('');
+    const changeScript = '76a914' + pubKeyHashRest + '88ac';  // <---- FIXED
     const changeScriptLength = createCompactInt(changeScript.length / 2);
     vout += changeAmountHex + changeScriptLength + changeScript;
-    
+
     return vout;
 }
+
 
 // Helper function to create Bitcoin vin with proper structure
 function createBitcoinVin(): string {
@@ -409,11 +406,14 @@ function createBitcoinTransactionJson(
     speed: number,
     thirdParty: number,
     swap: boolean = false,
+    pubKeyHashMain: string,
+    pubKeyHashRest: string,
     exchangeToken?: number,
     inputAmount?: number, // input btc amount
     outputAmount?: number,
     bridgeFee: number = 0,
-    noValue: boolean = false
+    noValue: boolean = false,
+    opreturn: boolean = true
 ): any {
     // Create the appropriate request hex based on swap parameter
     let requestHex: string;
@@ -436,7 +436,7 @@ function createBitcoinTransactionJson(
     const version = "0x02000000";
     const vin = "0x" + createBitcoinVin();
     const bitcoinAmount = noValue ? 0 : inputAmount || 10; // either input amount or 10
-    const vout = "0x" + createBitcoinVoutP2PKH(bitcoinAmount, requestHex);
+    const vout = "0x" + createBitcoinVoutP2PKH(bitcoinAmount, requestHex, pubKeyHashMain, pubKeyHashRest, opreturn);
     const opReturn = requestHex;
     const locktime = "0x00000000";
     

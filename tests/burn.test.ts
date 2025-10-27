@@ -246,9 +246,6 @@ async function setRelayReturn(isTrue: boolean): Promise<void> {
 async function mintTeleBTCForTest(address = deployerAddress, amount = 10000): Promise<string> {
     const client = new SuiClient({ url: getFullnodeUrl('localnet') });
     
-    // Get latest object references to avoid version mismatch
-    const telebtcCapRef = await getLatestObjectRef(client, telebtcCapId);
-    const telebtcTreasuryCapRef = await getLatestObjectRef(client, telebtcTreasuryCapId);
     await new Promise(resolve => setTimeout(resolve, 1500));
     const tx = new TransactionBlock();
     tx.setGasBudget(500000000);

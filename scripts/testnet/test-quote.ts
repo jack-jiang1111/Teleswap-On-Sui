@@ -22,7 +22,7 @@ async function testGetQuote() {
     
     // Test amounts for different tokens
     const testAmounts: Record<string, string> = {
-      'TELEBTC': '1000000000',    // 10 TELEBTC (assuming 8 decimals)
+      'TELEBTC': '10000000',    // 0.1 TELEBTC (assuming 8 decimals)
       'WBTC': '10000000',     // 0.1 WBTC (assuming 8 decimals)
       'SUI': '100000000',   // 0.1 SUI (assuming 9 decimals)
       'USDC': '100000000',     // 100 USDC (assuming 6 decimals)

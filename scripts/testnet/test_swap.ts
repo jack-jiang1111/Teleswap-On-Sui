@@ -68,7 +68,7 @@ class SwapTester {
     const poolUsdcSui = pools['USDC-SUI'];
     const poolUsdcUsdt = pools['USDC-USDT'];
     const poolUsdcWbtc = pools['USDC-BTC'];
-    const poolTelebtcWbtc = pools['TELEBTC-BTC'];
+    const poolTelebtcWbtc = pools['BTC-TELEBTC'];
 
     if (!poolUsdcSui || !poolUsdcUsdt || !poolUsdcWbtc || !poolTelebtcWbtc) {
       throw new Error('Pool IDs not found in package manager');
@@ -433,7 +433,7 @@ class SwapTester {
 
     try {
       // Run each test individually to avoid object reuse issues
-      for (let i = 8; i <= 8; i++) {
+      for (let i = 1; i <= 8; i++) {
         console.log(`\n🔄 Running Test ${i}/8...`);
         const result = await this.runSingleTest(i);
         results.push(result);

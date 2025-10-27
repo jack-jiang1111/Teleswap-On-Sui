@@ -167,11 +167,8 @@ export class TeleSwapSDK {
         effects: result.effects
       };
     } catch (error) {
-      return {
-        digest: '',
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      console.error('Error executing transaction:', error);
+      throw error;
     }
   }
 
@@ -183,7 +180,7 @@ export class TeleSwapSDK {
    * Unwrap tokens from wrapped state
    */
   async unwrap(
-    coinObjectId: string,
+    amount: number,
     userScript: string,
     scriptType: number,
     lockerLockingScript: string,
@@ -195,12 +192,26 @@ export class TeleSwapSDK {
     
     const targetAddress = recipient || this.getActiveAddress();
     
+    // Get all TeleBTC coins for the user
+    const telebtcCoins = await this.getTeleBTCCoins(targetAddress);
+    
+    if (telebtcCoins.length === 0) {
+      throw new Error('No TeleBTC coins found for the user');
+    }
+    
+    // Convert coin objects to transaction block objects
+    const coinObjects = telebtcCoins.map(coin => tx.object(coin.coinObjectId));
+    // Create Move vectors for coin lists with proper type specification for empty vectors
+    const telebtcVector =  tx.makeMoveVec({ objects: coinObjects })
+      
+    
     // Call unwrap function with correct arguments
     tx.moveCall({
       target: `${packageIds.mainPackageId}::burn_router_logic::unwrap`,
       arguments: [
         tx.object(packageIds.initializedObjects.burnRouterId),
-        tx.object(coinObjectId), // amount_coin (Coin<TELEBTC>)
+        telebtcVector, // amount_coins (vector<Coin<TELEBTC>>)
+        tx.pure(amount), // amount (u64)
         tx.pure(hexToBytes(userScript)), // user_script (vector<u8>)
         tx.pure(scriptType), // script_type (u8)
         tx.pure(hexToBytes(lockerLockingScript)), // locker_locking_script (vector<u8>)
@@ -218,44 +229,74 @@ export class TeleSwapSDK {
   /**
    * Swap and unwrap tokens
    */
+
+  // P2PK: u8 = 1, 32bytes
+  // P2WSH: u8 = 2, 32bytes
+  // P2TR: u8 = 3, 32bytes
+  // P2PKH: u8 = 4, 20bytes
+  // P2SH: u8 = 5, 20bytes
+  // P2WPKH: u8 = 6, 20bytes
   async swapAndUnwrap(
-    amounts: number[],
-    userScript: string,
-    scriptType: number,
-    lockerLockingScript: string,
+    amounts: number[], // [inputTokenAmount, minTeleBTCAmount]
+    userScript: string, // 20 or 32 bytes of the user script
+    scriptType: number, // 1-6 based on the script type
+    lockerLockingScript: string, // the same script passed in  the requestToBecomeLocker function
     thirdParty: number = 0,
-    inputCoinIds: {
-      wbtc?: string[],
+    inputCoinIds: { // the coin ids of the input tokens, only one of the tokens should be non-zero list
+      wbtc?: string[], // array of coin ids
       sui?: string[],
       usdt?: string[],
       usdc?: string[]
-    },
-    recipient?: string
+    }
   ): Promise<FunctionCallResult> {
     const packageIds = this.getPackageIds();
     const tx = new TransactionBlock();
-    
-    const targetAddress = recipient || this.getActiveAddress();
     
     // Get pool IDs from package manager
     const pools = this.packageManager.getCetusPools();
     const poolUsdcSui = pools['USDC-SUI'];
     const poolUsdcUsdt = pools['USDC-USDT'];
     const poolUsdcWbtc = pools['USDC-BTC'];
-    const poolTelebtcWbtc = pools['TELEBTC-BTC'];
+    const poolTelebtcWbtc = pools['BTC-TELEBTC'];
     
     if (!poolUsdcSui || !poolUsdcUsdt || !poolUsdcWbtc || !poolTelebtcWbtc) {
       throw new Error('Pool IDs not found in package manager');
     }
     
+    // The config id is a constant 
+    // change this to mainnet config id when deploying to mainnet
     const configId = "0x9774e359588ead122af1c7e7f64e14ade261cfeecdb5d0eb4a5b3b4c8ab8bd3e";
-    const clockId = "0x6";
+    const clockId = "0x6"; // the clock id is a constant
     
     // Prepare coin objects
-    const wbtcCoins = (inputCoinIds.wbtc || []).map(id => tx.object(id));
-    const suiCoins = (inputCoinIds.sui || []).map(id => tx.object(id));
-    const usdtCoins = (inputCoinIds.usdt || []).map(id => tx.object(id));
-    const usdcCoins = (inputCoinIds.usdc || []).map(id => tx.object(id));
+    const wbtcCoins = inputCoinIds.wbtc;
+    const suiCoins = inputCoinIds.sui;
+    const usdtCoins = inputCoinIds.usdt;
+    const usdcCoins = inputCoinIds.usdc;
+
+    const mockTokens = this.packageManager.getMockTokens();
+
+    // if deploying to mainnet, use the mainnet package ids (which is a constant)
+    const wbtcType = `${mockTokens.btc.packageId}::btc::BTC`; // define the types
+    const usdtType = `${mockTokens.usdt.packageId}::usdt::USDT`;
+    const usdcType = `${mockTokens.usdc.packageId}::usdc::USDC`;
+    const suiType = '0x2::sui::SUI';
+
+    const wbtcVector = wbtcCoins && wbtcCoins.length > 0 
+      ? tx.makeMoveVec({ objects: wbtcCoins })
+      : tx.makeMoveVec({ objects: [], type: `0x2::coin::Coin<${wbtcType}>` });
+    
+    const suiVector = suiCoins && suiCoins.length > 0 
+      ? tx.makeMoveVec({ objects: suiCoins })
+      : tx.makeMoveVec({ objects: [], type: `0x2::coin::Coin<${suiType}>` });
+    
+    const usdtVector = usdtCoins && usdtCoins.length > 0 
+      ? tx.makeMoveVec({ objects: usdtCoins })
+      : tx.makeMoveVec({ objects: [], type: `0x2::coin::Coin<${usdtType}>` });
+    
+    const usdcVector = usdcCoins && usdcCoins.length > 0 
+      ? tx.makeMoveVec({ objects: usdcCoins })
+      : tx.makeMoveVec({ objects: [], type: `0x2::coin::Coin<${usdcType}>` });
     
     // Call swap_and_unwrap function
     tx.moveCall({
@@ -272,10 +313,10 @@ export class TeleSwapSDK {
         tx.object(poolUsdcUsdt), // pool_usdc_usdt: &mut Pool<USDC, USDT>
         tx.object(poolUsdcWbtc), // pool_usdc_wbtc: &mut Pool<USDC, BTC>
         tx.object(poolTelebtcWbtc), // pool_telebtc_wbtc: &mut Pool<TELEBTC, BTC>
-        tx.pure(wbtcCoins), // wbtc_coins: vector<Coin<BTC>>
-        tx.pure(suiCoins), // sui_coins: vector<Coin<SUI>>
-        tx.pure(usdtCoins), // usdt_coins: vector<Coin<USDT>>
-        tx.pure(usdcCoins), // usdc_coins: vector<Coin<USDC>>
+        wbtcVector, // wbtc_coins: vector<Coin<BTC>>
+        suiVector, // sui_coins: vector<Coin<SUI>>
+        usdtVector, // usdt_coins: vector<Coin<USDT>>
+        usdcVector, // usdc_coins: vector<Coin<USDC>>
         tx.object(packageIds.telebtc.capId), // telebtc_cap: &mut TeleBTCCap
         tx.object(packageIds.telebtc.treasuryCapId), // treasury_cap: &mut TreasuryCap<TELEBTC>
         tx.object(packageIds.btcrelayRelayId), // btcrelay: &BTCRelay
@@ -504,7 +545,7 @@ export class TeleSwapSDK {
       arguments: [
         tx.object(ccTransferRouterId),
         tx.object(txAndProof),
-        tx.pure(hexToBytes(params.lockerLockingScriptHex)),
+        tx.pure(hexToBytes(params.lockerLockingScriptHex)), // always start with a914
         tx.object(lockerCapabilityId),
         tx.object(btcrelayId),
         tx.object(telebtcCapId),
@@ -525,9 +566,9 @@ export class TeleSwapSDK {
     // Request an exact amount by coin type; SDK will merge/split
     coinType: string;
     amount: string | bigint;
-    lockerLockingScriptHashHex: string;
+    lockerLockingPubHashHex: string;
     lockerScriptType: number;
-    lockerRescueScriptHex: string;
+    lockerRescuePubHashHex: string;
   }): Promise<FunctionCallResult> {
     const packageIds = this.getPackageIds();
     const tx = new TransactionBlock();
@@ -542,10 +583,10 @@ export class TeleSwapSDK {
       target: `${packageIds.mainPackageId}::lockermanager::request_to_become_locker`,
       arguments: [
         tx.object(packageIds.initializedObjects.lockerCapId),
-        tx.pure(hexToBytes(params.lockerLockingScriptHashHex)),
+        tx.pure(hexToBytes(params.lockerLockingPubHashHex)), // the pubkey hash of locker (20 byte) for example        
         coinArg,
         tx.pure(params.lockerScriptType),
-        tx.pure(hexToBytes(params.lockerRescueScriptHex))
+        tx.pure(hexToBytes(params.lockerRescuePubHashHex)) // resue pubkey hash (20 byte)
       ]
     });
 
@@ -647,7 +688,7 @@ export class TeleSwapSDK {
 
     if (inputIsTelebtc) {
       // Selling TELEBTC for outputToken
-      functionName = 'getQuoteSellTelebtc_rev';
+      functionName = 'getQuoteSellTelebtc';
       // Determine correct type argument based on outputToken
       if (outputToken == 'WBTC') {
         typeArguments = [WBTC_TYPE_ARG];
@@ -662,7 +703,7 @@ export class TeleSwapSDK {
       }
     } else if (outputIsTelebtc) {
       // Buying TELEBTC with inputToken
-      functionName = 'getQuoteBuyTelebtc_rev';
+      functionName = 'getQuoteBuyTelebtc';
       // Determine correct type argument based on inputToken
       if (inputToken == 'WBTC') {
         typeArguments = [WBTC_TYPE_ARG];
@@ -767,6 +808,23 @@ export class TeleSwapSDK {
     });
 
     return balances;
+  }
+
+  /**
+   * Get all TeleBTC coins for an address
+   */
+  async getTeleBTCCoins(address?: string): Promise<any[]> {
+    const targetAddress = address || this.getActiveAddress();
+    const packageIds = this.getPackageIds();
+    
+    const telebtcCoinType = `${packageIds.telebtc.packageId}::telebtc::TELEBTC`;
+    
+    const coins = await this.client.getCoins({
+      owner: targetAddress,
+      coinType: telebtcCoinType
+    });
+
+    return coins.data;
   }
 
   /**

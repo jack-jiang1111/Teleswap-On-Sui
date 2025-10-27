@@ -2,13 +2,8 @@ sui client envs
 
 
 start a local network need to run everytime restart a node:
-Remove-Item -Recurse -Force "$env:USERPROFILE\.sui\sui_config"
 
 
-$env:RUST_LOG="off,sui_node=info"; sui start --with-faucet
-$env:RUST_LOG="off,sui_node=info"; sui start --with-faucet --epoch-duration-ms 60000
-check wether connect to local netwrok: 
-$Invoke-WebRequest -Uri "http://127.0.0.1:9000" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"jsonrpc":"2.0","id":1,"method":"sui_getTotalTransactionBlocks","params":[]}'
 
 request token
 $sui client faucet
@@ -24,6 +19,3 @@ npx ts-node scripts/deploy.ts testnet
 
 sui move build --skip-fetch-latest-git-deps
 npm test -- tests/locker.test.ts
-
-git config --global http.proxy http://127.0.0.1:7897
-git config --global https.proxy http://127.0.0.1:7897

@@ -41,19 +41,19 @@ async function main() {
   const STARTING_BLOCK_NUMBER = 1;
   const APP_ID = 1;
   // Fees and parameters (examples mirrored from tests usage names)
-  const PROTOCOL_PERCENTAGE_FEE = 100; // adjust if needed
-  const LOCKER_PERCENTAGE_FEE = 50; // adjust if needed
-  const TRANSFER_DEADLINE = 1000; // adjust if needed
-  const SLASHER_PERCENTAGE_REWARD = 100; // adjust if needed
-  const BITCOIN_FEE = 100; // adjust if needed
+  const PROTOCOL_PERCENTAGE_FEE = 100; // 1% goes to treasury
+  const LOCKER_PERCENTAGE_FEE = 50; // 0.5% goes to locker
+  const TRANSFER_DEADLINE = 1000; // how many blocks to wait for the burn request to be executed
+  const SLASHER_PERCENTAGE_REWARD = 100; // 1% goes to slasher
+  const BITCOIN_FEE = 0; // 0 goes to locker (bitcoin fee used for locker gas fee)
 
   // Rewarder configuration
-  const REWARDER_ADDRESS = activeAddress; // Use deployer as rewarder address
-  const REWARDER_PERCENTAGE_FEE = 5; // 0.05% in basis points
+  const REWARDER_ADDRESS = "0xe4e1bf5689c6bb8ad58cab8e4852ca197a146f933a267b9aba5f908322f69595"; // Use deployer as rewarder address
+  const REWARDER_PERCENTAGE_FEE = 50; // 0.5% goes to rewarder
 
   // Addresses from tests: TELEPORTER_ADDRESS, TREASURY, bitcoin_fee_oracle use deployer by default
   const TELEPORTER_ADDRESS = activeAddress;
-  const TREASURY = activeAddress;
+  const TREASURY = "0x23acf578af277fb597830522a110b36dc8da435cd6e7175fcffa4905fb796ce5";
   const BITCOIN_FEE_ORACLE = activeAddress;
 
   let ccTransferRouterId = "";
@@ -193,10 +193,10 @@ async function main() {
     const tx = new TransactionBlock();
     tx.setGasBudget(100000000);
     const LOCKERS_ADDRESS = activeAddress; // reserved param; using deployer
-    const THIRD_PARTY_ID = 1;
+    const THIRD_PARTY_ID = 0;
     const THIRD_PARTY_FEE = 0; // bps
     const THIRD_PARTY_ADDRESS = activeAddress;
-    const REWARD_DISTRIBUTOR = activeAddress; // disabled
+    const REWARD_DISTRIBUTOR = activeAddress; 
     const SPECIAL_TELEPORTER = activeAddress;
     tx.moveCall({
       target: `${packageId}::cc_exchange_storage::initialize`,
